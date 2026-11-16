@@ -64,7 +64,7 @@ v0.2.0 的 Go module 要求 Go 1.26；没有 Go 环境时可直接使用 Docker 
 配置页面只绑定 127.0.0.1，保存目标是当前目录的 .env，写入使用原子替换并设置为 600 权限。页面不会回显已经保存的 secret，也不会记录 POST 内容。当前发布客户端支持两种用户授权：
 
 - `X_AUTH_MODE=oauth2`：使用 X Developer 页面为目标账号生成的 OAuth 2.0 User Access Token；App-only Bearer Token 不能代表账号发帖，图片/视频上传需要相应的媒体权限。
-- `X_AUTH_MODE=oauth1`：使用旧 App 的 `X_API_KEY`、`X_API_SECRET`、`X_ACCESS_TOKEN`、`X_ACCESS_TOKEN_SECRET`。OAuth1 媒体走 `upload.twitter.com/1.1/media/upload.json` 的用户上下文分段上传。
+- `X_AUTH_MODE=oauth1`：使用旧 App 的 `X_API_KEY`、`X_API_SECRET`、`X_ACCESS_TOKEN`、`X_ACCESS_TOKEN_SECRET`。OAuth1 媒体走 `upload.x.com/1.1/media/upload.json` 的用户上下文分段上传。
 - `X_POST_API_VERSION=v2`（默认）：发帖走当前 `POST /2/tweets`，需要当前 Project 权限。
 - `X_POST_API_VERSION=v1.1`：免费旧 App 兼容路径，发帖走 `POST /1.1/statuses/update.json`，仅允许和 OAuth1 一起使用。该接口属于旧版接口，可能被 X 限制或下线；系统仍不使用已废弃的 `update_with_media`。
 

@@ -47,7 +47,7 @@ DEFAULTS = {
     "X_API_BASE_URL": "https://api.x.com",
     "X_AUTH_MODE": "oauth2",
     "X_POST_API_VERSION": "v2",
-    "X_MEDIA_UPLOAD_BASE_URL": "https://upload.twitter.com",
+    "X_MEDIA_UPLOAD_BASE_URL": "https://upload.x.com",
     "X_MEDIA_UPLOAD_PATH": "/2/media/upload",
     "X_MAX_CHARS": "280",
 }

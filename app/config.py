@@ -126,7 +126,7 @@ class Settings:
                 )
             ),
             x_media_upload_base_url=os.getenv(
-                "X_MEDIA_UPLOAD_BASE_URL", "https://upload.twitter.com"
+                "X_MEDIA_UPLOAD_BASE_URL", "https://upload.x.com"
             ).rstrip("/"),
             x_media_upload_path=os.getenv("X_MEDIA_UPLOAD_PATH", "/2/media/upload"),
             translation_provider=provider,
