@@ -18,6 +18,11 @@ def parser() -> argparse.ArgumentParser:
         "--test-latest", action="store_true", help="process exactly one supplied note URL"
     )
     result.add_argument(
+        "--test-profile-latest",
+        action="store_true",
+        help="process the newest verified note from the target profile",
+    )
+    result.add_argument(
         "--run-once",
         action="store_true",
         help="discover profile notes and process at most one new note",
@@ -49,6 +54,10 @@ async def main_async(args: argparse.Namespace) -> int:
     try:
         if args.test_latest:
             report = await pipeline.test_latest(args.note_url)
+            print(report)
+            return 0
+        if args.test_profile_latest:
+            report = await pipeline.test_profile_latest()
             print(report)
             return 0
         if args.daemon:

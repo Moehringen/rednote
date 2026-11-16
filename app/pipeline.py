@@ -72,6 +72,48 @@ class Pipeline:
         output_dir.mkdir(parents=True, exist_ok=True)
         return await self._fetch_process_report(source_url, output_dir, "test-latest")
 
+    async def test_profile_latest(self) -> Path:
+        """Process the newest verified profile note, including baseline notes."""
+        output_dir = self.settings.data_dir / "test_latest"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        errors: list[str] = []
+        identity = None
+        try:
+            identity = await self.xhs.resolve_profile_identity(
+                self.settings.profile_url,
+                self.settings.expected_user_id,
+                self.settings.target_nickname,
+            )
+            candidates = await self.xhs.list_user_notes(
+                identity.user_id, self.settings.profile_candidate_limit
+            )
+            detailed: list[tuple[ProfileCandidate, Note]] = []
+            for candidate in candidates:
+                try:
+                    note = await self.xhs.note(
+                        candidate.note_id, candidate.xsec_token, candidate.source_url
+                    )
+                except XhsCLIError as exc:
+                    errors.append(f"detail {candidate.note_id}: {exc}")
+                    continue
+                if note.author_user_id != identity.user_id or note.author != identity.nickname:
+                    errors.append(f"author mismatch for note {candidate.note_id}; skipped")
+                    continue
+                candidate.published_at = note.published_at
+                detailed.append((candidate, note))
+            latest = select_latest([candidate for candidate, _ in detailed])
+            if latest is None:
+                raise XhsCLIError("verified target profile returned no dated note candidates")
+            latest_note = next(note for candidate, note in detailed if candidate.note_id == latest.note_id)
+            return await self._fetch_process_report(
+                latest_note.source_url, output_dir, "test-profile-latest"
+            )
+        except (XhsCLIError, OSError, ValueError) as exc:
+            errors.append(str(exc))
+            return self._write_report(
+                output_dir, None, errors, [], None, "test-profile-latest", identity
+            )
+
     async def _fetch_process_report(
         self, source_url: str, output_dir: Path, operation: str
     ) -> Path:
