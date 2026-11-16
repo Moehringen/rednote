@@ -1,0 +1,14 @@
+.env
+.venv/
+.local/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.py[cod]
+data/*
+!data/.gitkeep
+!data/test_latest/.gitkeep
+data/cookies/
+data/xhs-config/
+*.cookie
+*.sqlite3

@@ -1,0 +1,10 @@
+{
+  "note_id": "000000000000000000000003",
+  "type": "video",
+  "title": "视频笔记",
+  "desc": "视频正文。",
+  "time": 1794806400000,
+  "user": {"user_id": "67d21d20000000000e01d41e", "nickname": "琢磨鸟"},
+  "image_list": [{"url_default": "https://example.invalid/cover.jpg"}],
+  "video": {"masters": ["https://example.invalid/video.mp4"]}
+}
