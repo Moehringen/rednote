@@ -24,6 +24,12 @@ def parser() -> argparse.ArgumentParser:
         help="process the newest verified note from the target profile",
     )
     result.add_argument(
+        "--publish-profile-rank",
+        type=int,
+        metavar="N",
+        help="publish the Nth newest verified non-pinned profile note once",
+    )
+    result.add_argument(
         "--run-once",
         action="store_true",
         help="discover profile notes and process at most one new note",
@@ -74,6 +80,11 @@ async def main_async(args: argparse.Namespace) -> int:
         if args.test_profile_latest:
             with collector_lock(settings.data_dir / ".collector.lock"):
                 report = await pipeline.test_profile_latest()
+            print(report)
+            return 0
+        if args.publish_profile_rank is not None:
+            with collector_lock(settings.data_dir / ".collector.lock"):
+                report = await pipeline.publish_profile_rank(args.publish_profile_rank)
             print(report)
             return 0
         if args.daemon:

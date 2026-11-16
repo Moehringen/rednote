@@ -42,6 +42,14 @@ def _published_at(value: str, timezone: str) -> str | None:
             return datetime.strptime(text, fmt).replace(tzinfo=zone).isoformat()
         except ValueError:
             continue
+    match = re.search(r"\b([A-Z][a-z]{2})\s+(\d{1,2})(?:,\s*(\d{4}))?\b", text)
+    if match:
+        year = int(match.group(3) or now.year)
+        try:
+            month = datetime.strptime(match.group(1), "%b").month
+            return datetime(year, month, int(match.group(2)), tzinfo=zone).isoformat()
+        except ValueError:
+            pass
     return text
 
 

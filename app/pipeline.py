@@ -14,7 +14,7 @@ from .browser_xhs import BrowserXhsClient
 from .config import Settings
 from .media import MediaDownloadError, download_note_media
 from .models import Note, ProfileCandidate, Translation
-from .profile_discovery import select_latest
+from .profile_discovery import rank_candidates, select_latest
 from .storage import NoteStore
 from .thread_builder import DraftPost, build_thread, draft_to_dict
 from .translate import TranslationError, Translator, make_translator
@@ -131,6 +131,74 @@ class Pipeline:
             errors.append(str(exc))
             return self._write_report(
                 output_dir, None, errors, [], None, "test-profile-latest", identity
+            )
+
+    async def publish_profile_rank(self, rank: int) -> Path:
+        """Publish one explicitly requested non-pinned profile rank."""
+        report_dir = self.settings.data_dir / "daily"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        errors: list[str] = []
+        identity = None
+        if rank < 1:
+            return self._write_report(
+                report_dir,
+                None,
+                ["profile rank must be at least 1"],
+                [],
+                None,
+                "publish-profile-rank",
+                None,
+            )
+        try:
+            identity = await self.xhs.resolve_profile_identity(
+                self.settings.profile_url,
+                self.settings.expected_user_id,
+                self.settings.target_nickname,
+            )
+            candidates = await self.xhs.list_user_notes(
+                identity.user_id, self.settings.profile_candidate_limit
+            )
+            detailed: list[tuple[ProfileCandidate, Note]] = []
+            for candidate in candidates:
+                try:
+                    note = await self.xhs.note(
+                        candidate.note_id, candidate.xsec_token, candidate.source_url
+                    )
+                except XhsCLIError as exc:
+                    errors.append(f"detail {candidate.note_id}: {exc}")
+                    continue
+                if note.author_user_id != identity.user_id or note.author != identity.nickname:
+                    errors.append(f"author mismatch for note {candidate.note_id}; skipped")
+                    continue
+                candidate.published_at = note.published_at
+                candidate.author = note.author
+                candidate.author_user_id = note.author_user_id
+                detailed.append((candidate, note))
+            ranked = rank_candidates([candidate for candidate, _ in detailed])
+            if len(ranked) < rank:
+                raise XhsCLIError(
+                    f"only {len(ranked)} verified non-pinned note candidates are available; rank {rank} not found"
+                )
+            target = ranked[rank - 1]
+            note = next(note for candidate, note in detailed if candidate.note_id == target.note_id)
+            row = self.store.get(note.note_id)
+            if row and row["status"] in {"published", "publishing", "publish_unknown"}:
+                raise XhsCLIError(
+                    f"note {note.note_id} already has publication state {row['status']}; refusing duplicate post"
+                )
+            return await self._process_note(
+                note, report_dir, f"publish-profile-rank-{rank}", identity, errors
+            )
+        except (XhsCLIError, OSError, ValueError) as exc:
+            errors.append(str(exc))
+            return self._write_report(
+                report_dir,
+                None,
+                errors,
+                [],
+                None,
+                f"publish-profile-rank-{rank}",
+                identity,
             )
 
     async def _fetch_process_report(

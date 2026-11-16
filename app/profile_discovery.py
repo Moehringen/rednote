@@ -3,9 +3,9 @@ from __future__ import annotations
 from .models import ProfileCandidate
 
 
-def select_latest(candidates: list[ProfileCandidate]) -> ProfileCandidate | None:
+def rank_candidates(candidates: list[ProfileCandidate]) -> list[ProfileCandidate]:
     if not candidates:
-        return None
+        return []
     unique: dict[str, ProfileCandidate] = {candidate.note_id: candidate for candidate in candidates}
     candidates = list(unique.values())
     # Explicitly pinned entries are excluded. Unknown pin status is retained,
@@ -17,4 +17,9 @@ def select_latest(candidates: list[ProfileCandidate]) -> ProfileCandidate | None
     def sort_key(candidate: ProfileCandidate) -> tuple[int, str]:
         return (1 if candidate.published_at else 0, candidate.published_at or "")
 
-    return max(enumerate(pool), key=lambda pair: (sort_key(pair[1]), -pair[0]))[1]
+    return sorted(pool, key=sort_key, reverse=True)
+
+
+def select_latest(candidates: list[ProfileCandidate]) -> ProfileCandidate | None:
+    ranked = rank_candidates(candidates)
+    return ranked[0] if ranked else None

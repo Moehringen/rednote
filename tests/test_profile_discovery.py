@@ -1,5 +1,5 @@
 from app.models import ProfileCandidate
-from app.profile_discovery import select_latest
+from app.profile_discovery import rank_candidates, select_latest
 
 
 def test_latest_ignores_pinned_old_note() -> None:
@@ -27,3 +27,12 @@ def test_latest_falls_back_to_pinned_when_all_are_pinned() -> None:
         ),
     ]
     assert select_latest(candidates).note_id == "000000000000000000000002"
+
+
+def test_rank_excludes_pinned_and_returns_second_newest() -> None:
+    candidates = [
+        ProfileCandidate("pinned", "Pinned", "u/pinned", "2026-11-16T00:00:00+00:00", True),
+        ProfileCandidate("new", "New", "u/new", "2026-11-15T00:00:00+00:00", False),
+        ProfileCandidate("second", "Second", "u/second", "2026-11-14T00:00:00+00:00", False),
+    ]
+    assert [item.note_id for item in rank_candidates(candidates)] == ["new", "second"]
