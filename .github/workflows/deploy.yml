@@ -44,15 +44,18 @@ jobs:
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          # These resource identifiers are not credentials. Keep secret overrides
+          # for portability, but make the configured production project work out
+          # of the box instead of passing empty auth inputs to google-github-actions/auth.
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER || 'projects/449684825320/locations/global/workloadIdentityPools/github-actions/providers/github' }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT || 'github-deployer@quanttrade-459605.iam.gserviceaccount.com' }}
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
       - name: Deploy over IAP/SSH
         env:
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          GCP_ZONE: ${{ secrets.GCP_ZONE }}
-          GCP_INSTANCE: ${{ secrets.GCP_INSTANCE }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID || 'quanttrade-459605' }}
+          GCP_ZONE: ${{ secrets.GCP_ZONE || 'us-central1-b' }}
+          GCP_INSTANCE: ${{ secrets.GCP_INSTANCE || 'instance-20261116-050519' }}
         run: |
           gcloud compute ssh "$GCP_INSTANCE" \
             --project "$GCP_PROJECT_ID" \
