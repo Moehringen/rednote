@@ -13,13 +13,19 @@ def _bool(value: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
+_DISALLOWED_TAGS = {"#xiaohongshu", "#rednote", "#小红书"}
+
+
 def _tags(value: str) -> tuple[str, ...]:
     result: list[str] = []
     for item in value.split():
         tag = item.strip()
         if not tag:
             continue
-        result.append(tag if tag.startswith("#") else f"#{tag}")
+        normalized = tag if tag.startswith("#") else f"#{tag}"
+        if normalized.casefold() in _DISALLOWED_TAGS:
+            continue
+        result.append(normalized)
     return tuple(dict.fromkeys(result))
 
 
@@ -110,6 +116,13 @@ class Settings:
         x_post_api_version = os.getenv("X_POST_API_VERSION", "v2").strip().lower()
         if x_post_api_version not in {"v2", "v1.1"}:
             raise ValueError("X_POST_API_VERSION must be v2 or v1.1")
+        configured_tag_value = os.getenv("X_TAG_POOL", os.getenv("X_TAGS", DEFAULT_TAG_POOL))
+        configured_tags = _tags(configured_tag_value)
+        # A stale deployment may still contain the old, deliberately blocked
+        # #Xiaohongshu-only pool. Fail safe to the curated default pool instead
+        # of silently publishing without any tags.
+        if configured_tag_value.strip() and not configured_tags:
+            configured_tags = _tags(DEFAULT_TAG_POOL)
         return cls(
             xhs_backend=xhs_backend,
             profile_url=os.getenv("XHS_PROFILE_URL", "https://xhslink.cn/o/Dfkx6Lhilv"),
@@ -137,9 +150,7 @@ class Settings:
             x_access_token=os.getenv("X_ACCESS_TOKEN", ""),
             x_access_token_secret=os.getenv("X_ACCESS_TOKEN_SECRET", ""),
             x_max_chars=int(os.getenv("X_MAX_CHARS", "280")),
-            x_tag_pool=_tags(
-                os.getenv("X_TAG_POOL", os.getenv("X_TAGS", DEFAULT_TAG_POOL))
-            ),
+            x_tag_pool=configured_tags,
             x_tag_count=max(0, int(os.getenv("X_TAG_COUNT", "4"))),
             x_media_upload_base_url=os.getenv(
                 "X_MEDIA_UPLOAD_BASE_URL", "https://upload.x.com"

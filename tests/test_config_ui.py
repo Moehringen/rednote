@@ -4,6 +4,7 @@ import os
 import stat
 from pathlib import Path
 
+from app.config import Settings
 from app.config_ui import ConfigStore, render_config_page
 
 
@@ -50,3 +51,14 @@ def test_blank_secret_keeps_existing_value_and_publish_requires_confirmation(tmp
         assert "I UNDERSTAND" in str(exc)
     else:
         raise AssertionError("publish must require explicit confirmation")
+
+
+def test_legacy_blocked_only_tag_pool_falls_back_to_curated_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("X_TAG_POOL", "#Xiaohongshu")
+    settings = Settings.from_env(None)
+
+    assert len(settings.x_tag_pool) >= 4
+    assert all(
+        tag.casefold() not in {"#xiaohongshu", "#rednote", "#小红书"}
+        for tag in settings.x_tag_pool
+    )
