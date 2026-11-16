@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import httpx
+
 from app.x_client import XClient
 
 
@@ -102,3 +104,11 @@ def test_oauth1_video_upload_uses_legacy_chunked_commands(tmp_path: Path) -> Non
     assert asyncio.run(client.upload_video(media)) == "123"
     assert [call["command"] for call in form_calls] == ["INIT", "FINALIZE", "STATUS"]
     assert append_calls == [{"command": "APPEND", "media_id": "123", "segment_index": 0}]
+
+
+def test_http_error_message_keeps_safe_x_error_message() -> None:
+    response = httpx.Response(
+        401,
+        json={"errors": [{"code": 89, "message": "Invalid or expired token."}]},
+    )
+    assert XClient._http_error_message(response) == "HTTP 401: Invalid or expired token."

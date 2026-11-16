@@ -141,11 +141,16 @@ class XClient:
     def _http_error_message(response: httpx.Response) -> str:
         try:
             payload = response.json()
-            detail = payload.get("detail") if isinstance(payload, dict) else None
-            if not detail and isinstance(payload, dict) and payload.get("errors"):
-                detail = payload["errors"][0].get("detail")
+            detail = None
+            if isinstance(payload, dict):
+                detail = payload.get("detail") or payload.get("title")
+                errors = payload.get("errors")
+                if not detail and isinstance(errors, list) and errors:
+                    first = errors[0]
+                    if isinstance(first, dict):
+                        detail = first.get("detail") or first.get("message") or first.get("title")
             if detail:
-                return f"HTTP {response.status_code}: {detail}"
+                return f"HTTP {response.status_code}: {str(detail)[:240]}"
         except (ValueError, TypeError, IndexError, AttributeError):
             pass
         return f"HTTP {response.status_code}"
