@@ -34,6 +34,7 @@ sudo chmod 700 "$BASE_DIR/data"
 sudo env \
   HOST_DATA_DIR="$BASE_DIR/data" \
   DEPLOY_ENV_FILE="$BASE_DIR/.env" \
+  REMOTE_DESKTOP="${REMOTE_DESKTOP:-true}" \
   docker compose \
     --env-file "$BASE_DIR/.env" \
     -f "$SOURCE_DIR/docker-compose.yml" \
@@ -42,6 +43,7 @@ sudo env \
 sudo env \
   HOST_DATA_DIR="$BASE_DIR/data" \
   DEPLOY_ENV_FILE="$BASE_DIR/.env" \
+  REMOTE_DESKTOP="${REMOTE_DESKTOP:-true}" \
   docker compose \
     --env-file "$BASE_DIR/.env" \
     -f "$SOURCE_DIR/docker-compose.yml" \

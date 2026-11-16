@@ -26,8 +26,11 @@ services:
       XHS_COOKIE_FILE: /app/data/cookies/xhs.cookie
       BROWSER_PROFILE_DIR: /app/data/browser-profile
       BROWSER_EXECUTABLE_PATH: ""
+      REMOTE_DESKTOP: "${REMOTE_DESKTOP:-false}"
     volumes:
       - ${HOST_DATA_DIR:-./data}:/app/data
+    ports:
+      - "127.0.0.1:6080:6080"
     shm_size: "1gb"
     healthcheck:
       test: ["CMD", "python", "-m", "app", "--healthcheck"]

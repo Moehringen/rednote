@@ -148,6 +148,15 @@ HOST_DATA_DIR=/opt/rednote_to_x/data
 
 镜像内已经包含 Playwright Chromium 和 Xvfb；不需要 VPS 有真实桌面。首次登录仍需通过临时 noVNC/SSH 隧道完成一次，后续由容器每天 09:00 自动运行。CI 不读取、不上传 `.env`、Cookie、SQLite 或浏览器资料。
 
+远端首次登录测试时，部署脚本默认开启仅绑定 VPS 本机的 noVNC：
+
+```sh
+gcloud compute ssh --zone "$GCP_ZONE" "$GCP_INSTANCE" --project "$GCP_PROJECT_ID" \
+  -- -L 6080:127.0.0.1:6080
+```
+
+然后在本机打开 `http://127.0.0.1:6080/vnc.html?autoconnect=true`。登录完成并关闭浏览器后，持久化资料会留在 `data/browser-profile`；noVNC 端口不会暴露到公网。
+
 在容器内验证持久化的 Cookie 文件时，可以执行：
 
 ```sh

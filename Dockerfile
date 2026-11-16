@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 TZ=Asia/Singapore
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates xauth xvfb \
+    && apt-get install -y --no-install-recommends ca-certificates fluxbox novnc websockify x11vnc xauth xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt requirements-browser.txt ./
@@ -18,6 +18,8 @@ RUN pip install --no-cache-dir -r requirements.txt -r requirements-browser.txt \
     && chmod -R a+rX /ms-playwright
 COPY --from=xhs-builder /out/xhs /usr/local/bin/xhs
 COPY --chown=10001:10001 app ./app
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
 
 RUN addgroup --system --gid 10001 app \
     && adduser --system --uid 10001 --gid 10001 --home /home/app app \
@@ -26,4 +28,4 @@ RUN addgroup --system --gid 10001 app \
 ENV HOME=/home/app
 USER 10001:10001
 VOLUME ["/app/data"]
-CMD ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1440x1000x24 -nolisten tcp", "python", "-m", "app", "--daemon"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
