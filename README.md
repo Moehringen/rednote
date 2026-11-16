@@ -13,7 +13,7 @@
 4. 对候选笔记读取详情，按详情中的真实发布时间排序；`xhs-cli` 未暴露置顶字段，因此报告会明确标记置顶状态未验证。
 5. 下载图文笔记全部图片，或下载视频笔记的可播放视频 URL；视频封面不会被当成完整图文。
 6. 默认通过 MyMemory 翻译标题和正文，也可切换 LibreTranslate。
-7. 保存来源 URL 到元数据和报告（不写入推文正文），从可配置的人像/女性摄影标签池中为每篇笔记稳定随机抽取标签，生成单条推文或 Thread 草稿。
+7. 保存来源 URL 到元数据和报告（不写入推文正文），从可配置的人像/女性摄影标签池中为每篇笔记稳定随机抽取标签，生成单条推文草稿。
 8. SQLite 记录 baseline、处理状态、tweet_id、媒体 ID 和错误原因，避免重启重复发布。
 
 ## 本机持久浏览器后端
@@ -97,7 +97,7 @@ xhs user "$XHS_EXPECTED_USER_ID" --notes -n 10 -o jsonl
 - `images/`：图文原始图片；
 - `video.mp4`：视频原始文件；
 - `translated_en.txt`：英文译文；
-- `draft.json`：X 推文/Thread 草稿；
+- `draft.json`：单条 X 推文草稿；
 - `report.md`：身份匹配、发布时间、媒体数量、翻译状态和错误信息。
 
 注意：`xsec_token` 用于当前详情读取，但不会写进报告、草稿或日志。
@@ -138,7 +138,7 @@ X_ACCESS_TOKEN_SECRET=
 X_USER_ACCESS_TOKEN=
 ```
 
-草稿模式不调用 X API。发布模式还需要用户确认转载授权。图片最多四张一条推文，超过后拆 Thread；视频作为单独媒体发布。Thread 每一步都会先写入 SQLite，已成功的 tweet_id 不会重复创建。
+草稿模式不调用 X API。发布模式还需要用户确认转载授权。普通账号始终只发布一条推文：正文超过 `X_MAX_CHARS` 时在可读边界自动截断并加省略号，图片最多附加四张，超出的原图仍保存在本地但不附加到 X；视频作为单独媒体发布。
 
 OAuth2 模式使用当前 v2 媒体分段流程并需要 `media.write`。OAuth1 + `X_POST_API_VERSION=v1.1` 使用旧 App 的 user-context 分段媒体上传，再把 media_id 交给 `POST /1.1/statuses/update.json`。官方文档说明 `update_with_media` 已废弃，替代方式是先上传媒体再调用 `statuses/update`；旧版接口是否仍可用以实际账号响应为准。
 

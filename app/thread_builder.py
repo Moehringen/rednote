@@ -15,29 +15,8 @@ class DraftPost:
     video_path: str | None = None
 
 
-def _chunks(text: str, max_chars: int) -> list[str]:
-    text = text.strip()
-    if not text:
-        return [""]
-    chunks: list[str] = []
-    remaining = text
-    while len(remaining) > max_chars:
-        boundary = max(
-            remaining.rfind("\n", 0, max_chars + 1),
-            remaining.rfind(". ", 0, max_chars + 1),
-            remaining.rfind(" ", 0, max_chars + 1),
-        )
-        if boundary < max_chars // 2:
-            boundary = max_chars
-        chunk = remaining[:boundary].rstrip()
-        remaining = remaining[boundary:].lstrip()
-        chunks.append(chunk)
-    if remaining:
-        chunks.append(remaining)
-    return chunks
-
-
 _BLOCKED_TAGS = {"#xiaohongshu", "#rednote", "#小红书"}
+_MAX_IMAGES_PER_POST = 4
 
 
 def _normalize_tag_pool(tags: tuple[str, ...] | list[str] | None) -> list[str]:
@@ -76,6 +55,31 @@ def _format_tags(tags: tuple[str, ...]) -> str:
     return " ".join(tags)
 
 
+def _truncate_text(text: str, max_chars: int) -> str:
+    """Trim text deterministically at a readable boundary and add an ellipsis."""
+    text = text.strip()
+    if len(text) <= max_chars:
+        return text
+    if max_chars <= 1:
+        return "…"[:max_chars]
+
+    cutoff = max_chars - 1
+    candidate = text[:cutoff].rstrip()
+    boundary = max(
+        candidate.rfind("\n"),
+        candidate.rfind(". "),
+        candidate.rfind("! "),
+        candidate.rfind("? "),
+        candidate.rfind("。"),
+        candidate.rfind("！"),
+        candidate.rfind("？"),
+        candidate.rfind(" "),
+    )
+    if boundary >= cutoff // 2:
+        candidate = candidate[:boundary].rstrip()
+    return f"{candidate}…"
+
+
 def build_thread(
     note: Note,
     translation: Translation,
@@ -85,34 +89,36 @@ def build_thread(
     tags: tuple[str, ...] | list[str] | None = None,
     tag_count: int = 4,
 ) -> list[DraftPost]:
+    """Build exactly one X post; ordinary accounts do not use Threads."""
+    if max_chars < 1:
+        raise ValueError("X_MAX_CHARS must be positive")
+
     tag_line = _format_tags(select_tags(note.note_id, tags, tag_count))
+    suffix = f"\n\n{tag_line}" if tag_line else ""
     main = translation.as_text().strip()
-    suffix = tag_line
-    available = max(1, max_chars - len(suffix) - 2)
-    text_parts = _chunks(main, available) if main else [""]
-    text_parts[0] = "\n\n".join(part for part in (text_parts[0], suffix) if part)
+    available = max(0, max_chars - len(suffix))
+    if main and available:
+        text = _truncate_text(main, available) + suffix
+    elif suffix:
+        text = suffix.strip()[:max_chars]
+    else:
+        text = _truncate_text(main, max_chars)
 
     if note.note_type == "video":
         video_path = str(media_paths[0]) if media_paths else None
         if video_path is None:
             raise ValueError("video note has no downloaded video")
-        if len(text_parts[0]) > max_chars:
-            raise ValueError(f"draft post 1 exceeds X_MAX_CHARS={max_chars}")
-        return [DraftPost(index=0, text=text_parts[0], image_paths=[], video_path=video_path)]
+        return [DraftPost(index=0, text=text, image_paths=[], video_path=video_path)]
 
-    media_groups = [media_paths[index : index + 4] for index in range(0, len(media_paths), 4)]
-    count = max(len(text_parts), len(media_groups), 1)
-    posts: list[DraftPost] = []
-    for index in range(count):
-        if index < len(text_parts):
-            text = text_parts[index]
-        else:
-            text = f"({index + 1}/{count})"
-        if len(text) > max_chars:
-            raise ValueError(f"draft post {index + 1} exceeds X_MAX_CHARS={max_chars}")
-        paths = media_groups[index] if index < len(media_groups) else []
-        posts.append(DraftPost(index=index, text=text, image_paths=[str(path) for path in paths]))
-    return posts
+    # The source download still keeps every original image. X receives only the
+    # first four because a single post cannot carry more media without a Thread.
+    return [
+        DraftPost(
+            index=0,
+            text=text,
+            image_paths=[str(path) for path in media_paths[:_MAX_IMAGES_PER_POST]],
+        )
+    ]
 
 
 def draft_to_dict(posts: list[DraftPost]) -> list[dict[str, object]]:

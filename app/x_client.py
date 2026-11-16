@@ -440,6 +440,9 @@ class XClient:
         saved_media_ids: dict[str, list[str]] | None = None,
         on_progress: Callable[[list[str], dict[str, list[str]]], None] | None = None,
     ) -> list[str]:
+        """Publish one post; the legacy method name is kept for state compatibility."""
+        if len(posts) != 1 or posts[0].index != 0:
+            raise XAPIError("single-post mode requires exactly one draft post at index 0")
         tweet_ids = list(saved_tweet_ids or [])
         media_ids_by_index = dict(saved_media_ids or {})
         previous_id = tweet_ids[-1] if tweet_ids else None

@@ -14,7 +14,7 @@ from .x_client import XAPIError, XClient
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
-        description="Monitor a Xiaohongshu profile, save media, translate, and draft X threads"
+        description="Monitor a Xiaohongshu profile, save media, translate, and draft single X posts"
     )
     result.add_argument(
         "--test-latest", action="store_true", help="process exactly one supplied note URL"
