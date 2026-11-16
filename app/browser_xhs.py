@@ -366,9 +366,15 @@ class BrowserXhsClient:
                     break
         if await link.count() == 0:
             raise XhsCLIError(f"browser profile did not expose note {note_id}")
-        await link.click()
-        await self._page.wait_for_timeout(1_200)
-        if f"/discovery/item/{note_id}" not in self._page.url:
+        # The profile cards use a client-side click handler which can create a
+        # short-lived target when attached to an already-running Chromium over
+        # CDP.  Navigating to the public href directly is deterministic and
+        # keeps the persistent page alive for the next candidate.
+        href = await link.get_attribute("href")
+        if not href:
+            raise XhsCLIError(f"browser note link had no href for {note_id}")
+        await self._navigate(urljoin(self._page.url, href))
+        if not re.search(rf"/(?:discovery/item|explore)/{re.escape(note_id)}(?:$|[/?#])", self._page.url):
             raise XhsCLIError(f"browser did not open note detail {note_id}")
 
     async def note(self, note_id: str, token: str = "", source_url: str = "") -> Note:
