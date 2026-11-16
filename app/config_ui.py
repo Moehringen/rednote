@@ -20,6 +20,15 @@ SECRET_KEYS = (
     "X_CLIENT_ID",
     "X_CLIENT_SECRET",
 )
+SECRET_LABELS = {
+    "X_USER_ACCESS_TOKEN": "OAuth2 User Access Token（OAuth2，不用于 OAuth1）",
+    "X_API_KEY": "Consumer Key / Consumer API Key（OAuth1）",
+    "X_API_SECRET": "Consumer Secret / API Key Secret（OAuth1）",
+    "X_ACCESS_TOKEN": "OAuth1 User Access Token（OAuth1）",
+    "X_ACCESS_TOKEN_SECRET": "OAuth1 Access Token Secret（OAuth1）",
+    "X_CLIENT_ID": "OAuth2 Client ID（OAuth2 PKCE）",
+    "X_CLIENT_SECRET": "OAuth2 Client Secret（OAuth2 PKCE）",
+}
 PUBLIC_KEYS = (
     "MODE",
     "REPOST_AUTHORIZED",
@@ -167,7 +176,8 @@ def render_config_page(
         return " checked" if str(values.get(key, "")).lower() == "true" else ""
 
     secret_rows = "\n".join(
-        f'<label>{html.escape(key)}<input type="password" name="{html.escape(key)}" '
+        f'<label>{html.escape(SECRET_LABELS[key])} '
+        f'<code>{html.escape(key)}</code><input type="password" name="{html.escape(key)}" '
         f'autocomplete="new-password" placeholder="{("已保存，留空保持不变" if secret_status.get(key) else "未设置")}"></label>'
         for key in SECRET_KEYS
     )
