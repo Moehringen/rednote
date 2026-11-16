@@ -379,7 +379,10 @@ class BrowserXhsClient:
         if not href:
             raise XhsCLIError(f"browser note link had no href for {note_id}")
         await self._navigate(urljoin(self._page.url, href))
-        if not re.search(rf"/(?:discovery/item|explore)/{re.escape(note_id)}(?:$|[/?#])", self._page.url):
+        if not re.search(
+            rf"/(?:discovery/item|explore|user/profile/[^/]+)/{re.escape(note_id)}(?:$|[/?#])",
+            self._page.url,
+        ):
             raise XhsCLIError(f"browser did not open note detail {note_id}")
 
     async def note(self, note_id: str, token: str = "", source_url: str = "") -> Note:
@@ -388,7 +391,9 @@ class BrowserXhsClient:
 
     async def note_from_url(self, source_url: str) -> Note:
         await self._navigate(source_url)
-        match = re.search(r"/(?:discovery/item|explore)/([A-Za-z0-9]+)", self._page.url)
+        match = re.search(
+            r"/(?:discovery/item|explore|user/profile/[^/]+)/([A-Za-z0-9]+)", self._page.url
+        )
         if not match:
             raise XhsCLIError("browser note URL did not resolve to a note detail page")
         return await self._extract_note(match.group(1), source_url)
