@@ -57,7 +57,7 @@ jobs:
           GCP_ZONE: ${{ secrets.GCP_ZONE || 'us-central1-b' }}
           GCP_INSTANCE: ${{ secrets.GCP_INSTANCE || 'instance-20261116-050519' }}
         run: |
-          gcloud compute ssh "$GCP_INSTANCE" \
+          gcloud compute ssh --quiet "$GCP_INSTANCE" \
             --project "$GCP_PROJECT_ID" \
             --zone "$GCP_ZONE" \
             --command="bash -s -- '${GITHUB_SHA}'" \

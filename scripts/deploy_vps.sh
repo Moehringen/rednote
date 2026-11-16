@@ -25,6 +25,7 @@ else
 fi
 sudo git -C "$SOURCE_DIR" fetch --depth 1 origin "$DEPLOY_SHA"
 sudo git -C "$SOURCE_DIR" checkout --force "$DEPLOY_SHA"
+echo "deployed_source_sha=$(sudo git -C "$SOURCE_DIR" rev-parse HEAD)"
 
 # The container runs as UID/GID 10001 and owns the durable browser profile,
 # downloaded media, SQLite database, and optional CLI cache.
