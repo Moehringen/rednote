@@ -61,7 +61,18 @@ go install github.com/tamnd/xiaohongshu-cli/cmd/xhs@v0.2.0
 
 v0.2.0 的 Go module 要求 Go 1.26；没有 Go 环境时可直接使用 Docker Compose，它会在构建阶段安装固定版本。
 
-配置页面只绑定 127.0.0.1，保存目标是当前目录的 .env，写入使用原子替换并设置为 600 权限。页面不会回显已经保存的 secret，也不会记录 POST 内容。当前发布客户端需要的是 X Developer 页面中为目标账号生成的 OAuth 2.0 User Access Token；App-only Bearer Token 不能代表账号发帖。首次配置建议保持 MODE=draft，确认译文、标签和转载授权后再单独打开发布门禁。
+配置页面只绑定 127.0.0.1，保存目标是当前目录的 .env，写入使用原子替换并设置为 600 权限。页面不会回显已经保存的 secret，也不会记录 POST 内容。当前发布客户端支持两种用户授权：
+
+- `X_AUTH_MODE=oauth2`：使用 X Developer 页面为目标账号生成的 OAuth 2.0 User Access Token；App-only Bearer Token 不能代表账号发帖，图片/视频上传需要相应的媒体权限。
+- `X_AUTH_MODE=oauth1`：使用旧 App 的 `X_API_KEY`、`X_API_SECRET`、`X_ACCESS_TOKEN`、`X_ACCESS_TOKEN_SECRET`。OAuth1 媒体走 `upload.twitter.com/1.1/media/upload.json` 的用户上下文分段上传，发帖走当前 `POST /2/tweets`，不使用已废弃的 `update_with_media`。
+
+可以先做不发帖的鉴权检查：
+
+```sh
+python -m app --check-x-auth
+```
+
+首次配置建议保持 `MODE=draft`，确认译文、标签和转载授权后再单独打开发布门禁。
 
 主页长期轮询可能需要 Cookie。不要把 Cookie 写进 Git 或命令历史；可将浏览器导出的 Cookie 文件（请求头格式或 Netscape 格式）放在 `.env` 指定的 `XHS_COOKIE_FILE` 路径。xhs CLI 的 profile 页面会受到限流，配置了登录 Cookie 后再运行：
 
@@ -107,12 +118,17 @@ LIBRETRANSLATE_API_KEY=
 ```dotenv
 MODE=draft
 REPOST_AUTHORIZED=false
+X_AUTH_MODE=oauth1
+X_API_KEY=
+X_API_SECRET=
+X_ACCESS_TOKEN=
+X_ACCESS_TOKEN_SECRET=
 X_USER_ACCESS_TOKEN=
 ```
 
 草稿模式不调用 X API。发布模式还需要用户确认转载授权。图片最多四张一条推文，超过后拆 Thread；视频作为单独媒体发布。Thread 每一步都会先写入 SQLite，已成功的 tweet_id 不会重复创建。
 
-X 媒体上传使用当前 v2 分段流程：`/2/media/upload/initialize`、`/{media_id}/append`、`/{media_id}/finalize` 和 processing status；视频/图片用户授权需要包含 `media.write`。X API 的媒体上传能力和账号计费/权限以当前 X Developer 文档为准，不假定旧版免费额度；已废弃的 `update_with_media` 不会被使用。
+OAuth2 模式使用当前 v2 媒体分段流程并需要 `media.write`；OAuth1 模式使用旧 App 的 user-context 分段媒体上传，再把 media_id 交给当前 `POST /2/tweets`。X API 的媒体上传能力和账号计费/权限以当前 X Developer 文档为准；已废弃的 `update_with_media` 不会被使用。
 
 ## Docker Compose
 

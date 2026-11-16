@@ -34,3 +34,71 @@ def test_video_upload_uses_chunked_v2_flow(tmp_path: Path) -> None:
         "media_type": "video/mp4",
         "media_category": "tweet_video",
     }
+
+
+def test_oauth1_signing_uses_user_context_without_secret_in_header() -> None:
+    client = XClient(
+        "https://api.x.com",
+        auth_mode="oauth1",
+        consumer_key="consumer-key",
+        consumer_secret="consumer-secret",
+        resource_owner_key="access-token",
+        resource_owner_secret="access-secret",
+    )
+
+    url, headers, body = client._sign_oauth1(
+        "https://api.x.com/2/tweets",
+        "POST",
+        body='{"text":"hello"}',
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert url == "https://api.x.com/2/tweets"
+    assert body == '{"text":"hello"}'
+    assert headers["Authorization"].startswith("OAuth ")
+    assert "consumer-key" in headers["Authorization"]
+    assert "consumer-secret" not in headers["Authorization"]
+    assert "access-secret" not in headers["Authorization"]
+
+
+def test_oauth1_video_upload_uses_legacy_chunked_commands(tmp_path: Path) -> None:
+    media = tmp_path / "video.mp4"
+    media.write_bytes(b"video-bytes")
+    form_calls: list[dict[str, object]] = []
+    append_calls: list[dict[str, object]] = []
+    client = XClient(
+        "https://api.x.com",
+        auth_mode="oauth1",
+        consumer_key="ck",
+        consumer_secret="cs",
+        resource_owner_key="tk",
+        resource_owner_secret="ts",
+    )
+
+    async def fake_form(
+        method: str, url: str, form: dict[str, object]
+    ) -> dict[str, object]:
+        form_calls.append(form)
+        if form["command"] == "INIT":
+            return {"media_id_string": "123"}
+        return {"processing_info": {"state": "succeeded"}}
+
+    async def fake_multipart(
+        url: str,
+        form: dict[str, object],
+        media_bytes: bytes,
+        media_type: str,
+        name: str,
+    ) -> dict[str, object]:
+        append_calls.append(form)
+        assert media_bytes == b"video-bytes"
+        assert media_type == "video/mp4"
+        assert name == "video.mp4"
+        return {}
+
+    client._oauth1_form_request = fake_form  # type: ignore[method-assign]
+    client._oauth1_multipart_request = fake_multipart  # type: ignore[method-assign]
+
+    assert asyncio.run(client.upload_video(media)) == "123"
+    assert [call["command"] for call in form_calls] == ["INIT", "FINALIZE", "STATUS"]
+    assert append_calls == [{"command": "APPEND", "media_id": "123", "segment_index": 0}]

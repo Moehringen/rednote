@@ -40,9 +40,15 @@ class Settings:
     mode: str
     repost_authorized: bool
     x_api_base_url: str
+    x_auth_mode: str
     x_user_access_token: str
+    x_api_key: str
+    x_api_secret: str
+    x_access_token: str
+    x_access_token_secret: str
     x_max_chars: int
     x_tags: tuple[str, ...]
+    x_media_upload_base_url: str
     x_media_upload_path: str
     translation_provider: str
     mymemory_base_url: str
@@ -80,6 +86,9 @@ class Settings:
         xhs_backend = os.getenv("XHS_BACKEND", "cli").strip().lower()
         if xhs_backend not in {"cli", "browser"}:
             raise ValueError("XHS_BACKEND must be cli or browser")
+        x_auth_mode = os.getenv("X_AUTH_MODE", "oauth2").strip().lower()
+        if x_auth_mode not in {"oauth2", "oauth1", "auto"}:
+            raise ValueError("X_AUTH_MODE must be oauth2, oauth1, or auto")
         return cls(
             xhs_backend=xhs_backend,
             profile_url=os.getenv("XHS_PROFILE_URL", "https://xhslink.cn/o/Dfkx6Lhilv"),
@@ -98,7 +107,12 @@ class Settings:
             mode=mode,
             repost_authorized=_bool(os.getenv("REPOST_AUTHORIZED", "false")),
             x_api_base_url=os.getenv("X_API_BASE_URL", "https://api.x.com").rstrip("/"),
+            x_auth_mode=x_auth_mode,
             x_user_access_token=os.getenv("X_USER_ACCESS_TOKEN", ""),
+            x_api_key=os.getenv("X_API_KEY", ""),
+            x_api_secret=os.getenv("X_API_SECRET", ""),
+            x_access_token=os.getenv("X_ACCESS_TOKEN", ""),
+            x_access_token_secret=os.getenv("X_ACCESS_TOKEN_SECRET", ""),
             x_max_chars=int(os.getenv("X_MAX_CHARS", "280")),
             x_tags=_tags(
                 os.getenv(
@@ -106,6 +120,9 @@ class Settings:
                     "#Xiaohongshu #Fashion #StyleInspiration #OutfitIdeas #Photography",
                 )
             ),
+            x_media_upload_base_url=os.getenv(
+                "X_MEDIA_UPLOAD_BASE_URL", "https://upload.twitter.com"
+            ).rstrip("/"),
             x_media_upload_path=os.getenv("X_MEDIA_UPLOAD_PATH", "/2/media/upload"),
             translation_provider=provider,
             mymemory_base_url=os.getenv(
@@ -148,6 +165,22 @@ class Settings:
             return False, "MODE is draft"
         if not self.repost_authorized:
             return False, "REPOST_AUTHORIZED is false"
+        oauth1_ready = all(
+            (
+                self.x_api_key,
+                self.x_api_secret,
+                self.x_access_token,
+                self.x_access_token_secret,
+            )
+        )
+        if self.x_auth_mode == "oauth1":
+            return (True, "publish gates passed (oauth1)") if oauth1_ready else (
+                False,
+                "OAuth1 credentials are incomplete; need X_API_KEY, X_API_SECRET, "
+                "X_ACCESS_TOKEN, and X_ACCESS_TOKEN_SECRET",
+            )
+        if self.x_auth_mode == "auto" and oauth1_ready:
+            return True, "publish gates passed (oauth1 auto-selected)"
         if not self.x_user_access_token:
             return False, "X_USER_ACCESS_TOKEN is missing"
-        return True, "publish gates passed"
+        return True, "publish gates passed (oauth2)"

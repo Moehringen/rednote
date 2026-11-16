@@ -9,6 +9,7 @@ import sys
 from .config import Settings
 from .config_ui import serve_config_ui
 from .pipeline import Pipeline, collector_lock, run_daemon
+from .x_client import XAPIError, XClient
 
 
 def parser() -> argparse.ArgumentParser:
@@ -48,6 +49,11 @@ def parser() -> argparse.ArgumentParser:
         help="start the localhost-only X credential configuration page",
     )
     result.add_argument(
+        "--check-x-auth",
+        action="store_true",
+        help="run a read-only X /2/users/me authentication check",
+    )
+    result.add_argument(
         "--config-ui-port",
         type=int,
         default=8787,
@@ -69,6 +75,39 @@ async def main_async(args: argparse.Namespace) -> int:
         from .storage import NoteStore
 
         NoteStore(settings.db_path)
+        return 0
+    if args.check_x_auth:
+        ready, reason = settings.publish_ready
+        if not ready and settings.mode == "publish":
+            logging.error("X auth check blocked by publish configuration: %s", reason)
+            return 1
+        client = XClient(
+            settings.x_api_base_url,
+            settings.x_user_access_token,
+            settings.x_media_upload_path,
+            settings.request_timeout_seconds,
+            settings.retry_attempts,
+            settings.x_max_chars,
+            auth_mode=settings.x_auth_mode,
+            consumer_key=settings.x_api_key,
+            consumer_secret=settings.x_api_secret,
+            resource_owner_key=settings.x_access_token,
+            resource_owner_secret=settings.x_access_token_secret,
+            media_base_url=settings.x_media_upload_base_url,
+        )
+        try:
+            payload = await client.verify_credentials()
+        except XAPIError as exc:
+            logging.error("X auth check failed: %s", exc)
+            return 1
+        account = payload.get("data") or {}
+        print(
+            "X auth ok: auth_mode={} user_id={} username={}".format(
+                client.auth_mode,
+                account.get("id", "unknown"),
+                account.get("username", "unknown"),
+            )
+        )
         return 0
     pipeline = Pipeline(settings)
     try:

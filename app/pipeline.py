@@ -491,6 +491,12 @@ class Pipeline:
             self.settings.request_timeout_seconds,
             self.settings.retry_attempts,
             self.settings.x_max_chars,
+            auth_mode=self.settings.x_auth_mode,
+            consumer_key=self.settings.x_api_key,
+            consumer_secret=self.settings.x_api_secret,
+            resource_owner_key=self.settings.x_access_token,
+            resource_owner_secret=self.settings.x_access_token_secret,
+            media_base_url=self.settings.x_media_upload_base_url,
         )
         saved_tweet_ids, saved_media_ids = self.store.get_publish_state(note.note_id)
 

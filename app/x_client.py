@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
+from oauthlib.oauth1 import SIGNATURE_TYPE_AUTH_HEADER
+from oauthlib.oauth1 import Client as OAuth1Signer
 
 from .thread_builder import DraftPost
 
@@ -22,22 +26,53 @@ class XClient:
     def __init__(
         self,
         base_url: str,
-        access_token: str,
+        access_token: str = "",
         upload_path: str = "/2/media/upload",
         timeout: float = 45,
         attempts: int = 3,
         max_chars: int = 280,
+        *,
+        auth_mode: str = "oauth2",
+        consumer_key: str = "",
+        consumer_secret: str = "",
+        resource_owner_key: str = "",
+        resource_owner_secret: str = "",
+        media_base_url: str = "https://upload.twitter.com",
+        legacy_upload_path: str = "/1.1/media/upload.json",
     ) -> None:
-        if not access_token:
+        if auth_mode not in {"oauth1", "oauth2", "auto"}:
+            raise XAPIError("X_AUTH_MODE must be oauth1, oauth2, or auto")
+        oauth1_ready = all(
+            (consumer_key, consumer_secret, resource_owner_key, resource_owner_secret)
+        )
+        if auth_mode == "auto":
+            auth_mode = "oauth1" if oauth1_ready else "oauth2"
+        if auth_mode == "oauth1" and not oauth1_ready:
+            raise XAPIError(
+                "OAuth1 credentials are incomplete; need consumer and access token four-tuple"
+            )
+        if auth_mode == "oauth2" and not access_token:
             raise XAPIError("X_USER_ACCESS_TOKEN is missing")
         self.base_url = base_url.rstrip("/")
+        self.auth_mode = auth_mode
         self.access_token = access_token
         self.upload_path = upload_path
         self.timeout = timeout
         self.attempts = max(1, attempts)
         self.max_chars = max_chars
+        self.consumer_key = consumer_key
+        self.consumer_secret = consumer_secret
+        self.resource_owner_key = resource_owner_key
+        self.resource_owner_secret = resource_owner_secret
+        self.media_base_url = media_base_url.rstrip("/")
+        self.legacy_upload_path = legacy_upload_path
 
     async def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        if self.auth_mode == "oauth1":
+            return await self._request_oauth1(method, path, **kwargs)
+        return await self._request_bearer(method, path, **kwargs)
+
+    async def _request_bearer(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         last_error: Exception | None = None
         for attempt in range(1, self.attempts + 1):
             try:
@@ -49,17 +84,162 @@ class XClient:
                         **kwargs,
                     )
                 response.raise_for_status()
-                payload = response.json()
-                if not isinstance(payload, dict):
-                    raise XAPIError("X API returned a non-object response")
-                if payload.get("errors"):
-                    raise XAPIError("X API returned an error payload")
-                return payload
+                return self._payload(response)
+            except httpx.HTTPStatusError as exc:
+                last_error = XAPIError(self._http_error_message(exc.response))
+                if attempt < self.attempts:
+                    await asyncio.sleep(min(2**attempt, 8))
             except (httpx.HTTPError, ValueError, XAPIError) as exc:
                 last_error = exc
                 if attempt < self.attempts:
                     await asyncio.sleep(min(2**attempt, 8))
         raise XAPIError(f"X API request failed: {last_error or 'unknown error'}")
+
+    async def _request_oauth1(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        """Call a JSON X API endpoint with OAuth 1.0a user-context signing."""
+        json_body = kwargs.pop("json", None)
+        params = kwargs.pop("params", None)
+        headers = dict(kwargs.pop("headers", {}) or {})
+        body = None
+        if json_body is not None:
+            body = json.dumps(json_body, ensure_ascii=False, separators=(",", ":"))
+            headers.setdefault("Content-Type", "application/json")
+        url, signed_headers, signed_body = self._sign_oauth1(
+            f"{self.base_url}{path}", method, body=body, headers=headers, params=params
+        )
+        request_kwargs = dict(kwargs)
+        request_kwargs["headers"] = signed_headers
+        if signed_body is not None:
+            request_kwargs["content"] = signed_body.encode("utf-8")
+        last_error: Exception | None = None
+        for attempt in range(1, self.attempts + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    response = await client.request(method, url, **request_kwargs)
+                response.raise_for_status()
+                return self._payload(response)
+            except httpx.HTTPStatusError as exc:
+                last_error = XAPIError(self._http_error_message(exc.response))
+                if attempt < self.attempts:
+                    await asyncio.sleep(min(2**attempt, 8))
+            except (httpx.HTTPError, ValueError, XAPIError) as exc:
+                last_error = exc
+                if attempt < self.attempts:
+                    await asyncio.sleep(min(2**attempt, 8))
+        raise XAPIError(f"X API request failed: {last_error or 'unknown error'}")
+
+    @staticmethod
+    def _payload(response: httpx.Response) -> dict[str, Any]:
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise XAPIError("X API returned a non-object response")
+        if payload.get("errors"):
+            raise XAPIError("X API returned an error payload")
+        return payload
+
+    @staticmethod
+    def _http_error_message(response: httpx.Response) -> str:
+        try:
+            payload = response.json()
+            detail = payload.get("detail") if isinstance(payload, dict) else None
+            if not detail and isinstance(payload, dict) and payload.get("errors"):
+                detail = payload["errors"][0].get("detail")
+            if detail:
+                return f"HTTP {response.status_code}: {detail}"
+        except (ValueError, TypeError, IndexError, AttributeError):
+            pass
+        return f"HTTP {response.status_code}"
+
+    def _sign_oauth1(
+        self,
+        url: str,
+        method: str,
+        *,
+        body: str | None = None,
+        headers: dict[str, str] | None = None,
+        params: Any = None,
+    ) -> tuple[str, dict[str, str], str | None]:
+        if params:
+            query = urlencode(params, doseq=True)
+            url = f"{url}{'&' if '?' in url else '?'}{query}"
+        signer = OAuth1Signer(
+            self.consumer_key,
+            client_secret=self.consumer_secret,
+            resource_owner_key=self.resource_owner_key,
+            resource_owner_secret=self.resource_owner_secret,
+            signature_type=SIGNATURE_TYPE_AUTH_HEADER,
+        )
+        signed_url, signed_headers, signed_body = signer.sign(
+            url,
+            http_method=method.upper(),
+            body=body,
+            headers=headers or {},
+        )
+        return signed_url, signed_headers, signed_body
+
+    async def _oauth1_form_request(
+        self, method: str, url: str, form: dict[str, object]
+    ) -> dict[str, Any]:
+        body = urlencode(form)
+        signed_url, headers, signed_body = self._sign_oauth1(
+            url,
+            method,
+            body=body,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        last_error: Exception | None = None
+        for attempt in range(1, self.attempts + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    response = await client.request(
+                        method,
+                        signed_url,
+                        headers=headers,
+                        content=(signed_body or body).encode("utf-8"),
+                    )
+                response.raise_for_status()
+                return self._payload(response)
+            except httpx.HTTPStatusError as exc:
+                last_error = XAPIError(self._http_error_message(exc.response))
+                if attempt < self.attempts:
+                    await asyncio.sleep(min(2**attempt, 8))
+            except (httpx.HTTPError, ValueError, XAPIError) as exc:
+                last_error = exc
+                if attempt < self.attempts:
+                    await asyncio.sleep(min(2**attempt, 8))
+        raise XAPIError(f"X media request failed: {last_error or 'unknown error'}")
+
+    async def _oauth1_multipart_request(
+        self, url: str, form: dict[str, object], media: bytes, media_type: str, name: str
+    ) -> dict[str, Any]:
+        # OAuth 1.0a does not sign multipart body fields. The form values are sent
+        # as multipart fields alongside the media segment.
+        _, headers, _ = self._sign_oauth1(url, "POST")
+        last_error: Exception | None = None
+        for attempt in range(1, self.attempts + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    response = await client.post(
+                        url,
+                        headers=headers,
+                        data={key: str(value) for key, value in form.items()},
+                        files={"media": (name, media, media_type)},
+                    )
+                response.raise_for_status()
+                return self._payload(response)
+            except httpx.HTTPStatusError as exc:
+                last_error = XAPIError(self._http_error_message(exc.response))
+                if attempt < self.attempts:
+                    await asyncio.sleep(min(2**attempt, 8))
+            except (httpx.HTTPError, ValueError, XAPIError) as exc:
+                last_error = exc
+                if attempt < self.attempts:
+                    await asyncio.sleep(min(2**attempt, 8))
+        raise XAPIError(f"X media request failed: {last_error or 'unknown error'}")
+
+    @property
+    def _legacy_upload_url(self) -> str:
+        return f"{self.media_base_url}{self.legacy_upload_path}"
 
     async def upload_image(self, path: Path) -> str:
         if path.stat().st_size > 5 * 1024 * 1024:
@@ -71,12 +251,59 @@ class XClient:
             ".gif": "image/gif",
             ".webp": "image/webp",
         }.get(path.suffix.lower(), "application/octet-stream")
+        if self.auth_mode == "oauth1":
+            return await self._oauth1_simple_media_upload(path, content_type)
         return await self._chunked_upload(path, content_type, "tweet_image")
 
     async def upload_video(self, path: Path) -> str:
         if path.stat().st_size == 0:
             raise XAPIError("video file is empty")
+        if self.auth_mode == "oauth1":
+            return await self._oauth1_chunked_media_upload(path, "video/mp4")
         return await self._chunked_upload(path, "video/mp4", "tweet_video")
+
+    async def _oauth1_simple_media_upload(self, path: Path, media_type: str) -> str:
+        payload = await self._oauth1_multipart_request(
+            self._legacy_upload_url, {}, path.read_bytes(), media_type, path.name
+        )
+        return self._media_id(payload)
+
+    async def _oauth1_chunked_media_upload(self, path: Path, media_type: str) -> str:
+        payload = await self._oauth1_form_request(
+            "POST",
+            self._legacy_upload_url,
+            {
+                "command": "INIT",
+                "total_bytes": path.stat().st_size,
+                "media_type": media_type,
+                "media_category": "tweet_video",
+            },
+        )
+        media_id = self._media_id(payload)
+        chunk_size = 4 * 1024 * 1024
+        with path.open("rb") as file:
+            segment_index = 0
+            while chunk := file.read(chunk_size):
+                await self._oauth1_multipart_request(
+                    self._legacy_upload_url,
+                    {
+                        "command": "APPEND",
+                        "media_id": media_id,
+                        "segment_index": segment_index,
+                    },
+                    chunk,
+                    media_type,
+                    path.name,
+                )
+                segment_index += 1
+        finalized = await self._oauth1_form_request(
+            "POST",
+            self._legacy_upload_url,
+            {"command": "FINALIZE", "media_id": media_id},
+        )
+        if self._processing_info(finalized):
+            await self._wait_for_oauth1_processing(media_id)
+        return media_id
 
     async def _chunked_upload(self, path: Path, media_type: str, media_category: str) -> str:
         payload = await self._request(
@@ -111,11 +338,32 @@ class XClient:
 
     @staticmethod
     def _media_id(payload: dict[str, Any]) -> str:
-        data = payload.get("data") or {}
+        data = payload.get("data") or payload
         media_id = str(data.get("id") or data.get("media_id_string") or "")
         if not media_id:
             raise XAPIError("X media upload response has no media id")
         return media_id
+
+    @staticmethod
+    def _processing_info(payload: dict[str, Any]) -> dict[str, Any] | None:
+        return (payload.get("data") or {}).get("processing_info") or payload.get(
+            "processing_info"
+        )
+
+    async def _wait_for_oauth1_processing(self, media_id: str) -> None:
+        for _ in range(self.attempts * 10):
+            payload = await self._oauth1_form_request(
+                "POST",
+                self._legacy_upload_url,
+                {"command": "STATUS", "media_id": media_id},
+            )
+            info = self._processing_info(payload)
+            if not info or info.get("state") == "succeeded":
+                return
+            if info.get("state") == "failed":
+                raise XAPIError("X video processing failed")
+            await asyncio.sleep(float(info.get("check_after_secs", 2)))
+        raise XAPIError("X video processing timed out")
 
     async def _wait_for_processing(self, media_id: str) -> None:
         for _ in range(self.attempts * 10):
@@ -147,6 +395,10 @@ class XClient:
         if not tweet_id:
             raise XAPIError("X post response has no tweet id")
         return tweet_id
+
+    async def verify_credentials(self) -> dict[str, Any]:
+        """Perform a read-only user-context check without publishing anything."""
+        return await self._request("GET", "/2/users/me")
 
     async def publish_thread(
         self,

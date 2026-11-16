@@ -25,6 +25,8 @@ PUBLIC_KEYS = (
     "REPOST_AUTHORIZED",
     "X_TAGS",
     "X_API_BASE_URL",
+    "X_AUTH_MODE",
+    "X_MEDIA_UPLOAD_BASE_URL",
     "X_MEDIA_UPLOAD_PATH",
     "X_MAX_CHARS",
 )
@@ -33,6 +35,8 @@ DEFAULTS = {
     "REPOST_AUTHORIZED": "false",
     "X_TAGS": "#Xiaohongshu #Fashion #StyleInspiration #OutfitIdeas #Photography",
     "X_API_BASE_URL": "https://api.x.com",
+    "X_AUTH_MODE": "oauth2",
+    "X_MEDIA_UPLOAD_BASE_URL": "https://upload.twitter.com",
     "X_MEDIA_UPLOAD_PATH": "/2/media/upload",
     "X_MAX_CHARS": "280",
 }
@@ -195,12 +199,13 @@ def render_config_page(
   <h1>小红书 → X 本地配置</h1>
   <p class="hint">仅绑定在 127.0.0.1。页面不会显示已保存的 token，也不会把 token 写入日志、报告或 Git。</p>
   {status}
-  <div class="warning"><strong>重要：</strong>当前发布客户端使用 OAuth 2.0 的 <strong>User Access Token</strong>。
-  页面上 X 的 App-only <strong>Bearer Token</strong> 不能代表你的账号发帖；请填写为 @hugmygirl 生成的 OAuth 2.0 Access Token。发布图片或视频时还需要重新授权 <code>media.write</code> scope。</div>
+  <div class="warning"><strong>重要：</strong>可选择 OAuth 2.0 或旧 App OAuth 1.0a。
+  OAuth 2.0 需要用户 token 和媒体权限；OAuth 1.0a 需要 Consumer Key、Consumer Secret、Access Token、Access Token Secret 四项。
+  App-only <strong>Bearer Token</strong> 不能代表你的账号发帖。OAuth1 媒体上传使用当前兼容的分段媒体接口，不使用已废弃的 <code>update_with_media</code>。</div>
   <form method="post" action="/save">
     <input type="hidden" name="csrf" value="{html.escape(csrf_token, quote=True)}">
     <h2>X 凭证</h2>
-    <p class="hint">只需填写 OAuth 2.0 User Access Token 即可完成当前发布流程。其他字段为兼容性预留；留空会保留已保存值。</p>
+    <p class="hint">选择 <code>oauth1</code> 时填写 OAuth 1.0a 的四项凭证；选择 <code>oauth2</code> 时填写 OAuth 2.0 User Access Token。留空会保留已保存值。</p>
     {secret_rows}
     <h2>发布门禁</h2>
     <label>运行模式<select name="MODE"><option value="draft"{' selected' if str(values.get('MODE', 'draft')) == 'draft' else ''}>draft（只生成草稿）</option><option value="publish"{' selected' if str(values.get('MODE', 'draft')) == 'publish' else ''}>publish（允许发布）</option></select></label>
@@ -209,6 +214,8 @@ def render_config_page(
     <h2>推文选项</h2>
     <label>标签<input name="X_TAGS" value="{value('X_TAGS')}" placeholder="#Xiaohongshu #Fashion #StyleInspiration #OutfitIdeas #Photography"></label>
     <label>X API Base URL<input name="X_API_BASE_URL" value="{value('X_API_BASE_URL')}"></label>
+    <label>认证模式<select name="X_AUTH_MODE"><option value="oauth2"{' selected' if str(values.get('X_AUTH_MODE', 'oauth2')) == 'oauth2' else ''}>OAuth 2.0 User Token</option><option value="oauth1"{' selected' if str(values.get('X_AUTH_MODE', 'oauth2')) == 'oauth1' else ''}>OAuth 1.0a 旧 App</option><option value="auto"{' selected' if str(values.get('X_AUTH_MODE', 'oauth2')) == 'auto' else ''}>自动选择（完整 OAuth1 优先）</option></select></label>
+    <label>OAuth1 媒体上传 Base URL<input name="X_MEDIA_UPLOAD_BASE_URL" value="{value('X_MEDIA_UPLOAD_BASE_URL')}"></label>
     <label>媒体上传路径<input name="X_MEDIA_UPLOAD_PATH" value="{value('X_MEDIA_UPLOAD_PATH')}"></label>
     <label>单条推文最大字符数<input name="X_MAX_CHARS" value="{value('X_MAX_CHARS')}" inputmode="numeric"></label>
     <button type="submit">安全保存配置</button>
