@@ -27,6 +27,16 @@ def _published_at(value: str, timezone: str) -> str | None:
         return None
     zone = ZoneInfo(timezone)
     now = datetime.now(zone)
+    match = re.match(r"(\d+)\s*d\s+ago", text, re.I)
+    if match:
+        return (now - timedelta(days=int(match.group(1)))).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ).isoformat()
+    match = re.match(r"(\d+)\s*w\s+ago", text, re.I)
+    if match:
+        return (now - timedelta(weeks=int(match.group(1)))).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ).isoformat()
     match = re.search(r"(?:today|今天)[,， ]*(\d{1,2}):(\d{2})", text, re.I)
     if match:
         return now.replace(

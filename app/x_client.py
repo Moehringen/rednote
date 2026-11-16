@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 from collections.abc import Callable
 from pathlib import Path
@@ -58,9 +59,7 @@ class XClient:
                 last_error = exc
                 if attempt < self.attempts:
                     await asyncio.sleep(min(2**attempt, 8))
-        raise XAPIError(
-            f"X API request failed: {type(last_error).__name__ if last_error else 'unknown'}"
-        )
+        raise XAPIError(f"X API request failed: {last_error or 'unknown error'}")
 
     async def upload_image(self, path: Path) -> str:
         if path.stat().st_size > 5 * 1024 * 1024:
@@ -72,28 +71,41 @@ class XClient:
             ".gif": "image/gif",
             ".webp": "image/webp",
         }.get(path.suffix.lower(), "application/octet-stream")
-        with path.open("rb") as file:
-            payload = await self._request(
-                "POST",
-                self.upload_path,
-                files={"media": (path.name, file, content_type)},
-                data={"media_category": "tweet_image"},
-            )
-        return self._media_id(payload)
+        return await self._chunked_upload(path, content_type, "tweet_image")
 
     async def upload_video(self, path: Path) -> str:
         if path.stat().st_size == 0:
             raise XAPIError("video file is empty")
-        with path.open("rb") as file:
-            payload = await self._request(
-                "POST",
-                self.upload_path,
-                files={"media": (path.name, file, "video/mp4")},
-                data={"media_category": "tweet_video"},
-            )
+        return await self._chunked_upload(path, "video/mp4", "tweet_video")
+
+    async def _chunked_upload(self, path: Path, media_type: str, media_category: str) -> str:
+        payload = await self._request(
+            "POST",
+            f"{self.upload_path.rstrip('/')}/initialize",
+            json={
+                "total_bytes": path.stat().st_size,
+                "media_type": media_type,
+                "media_category": media_category,
+            },
+        )
         media_id = self._media_id(payload)
-        processing = payload.get("data", {}).get("processing_info")
-        if processing:
+        chunk_size = 4 * 1024 * 1024
+        with path.open("rb") as file:
+            segment_index = 0
+            while chunk := file.read(chunk_size):
+                await self._request(
+                    "POST",
+                    f"{self.upload_path.rstrip('/')}/{media_id}/append",
+                    json={
+                        "media": base64.b64encode(chunk).decode("ascii"),
+                        "segment_index": segment_index,
+                    },
+                )
+                segment_index += 1
+        finalized = await self._request(
+            "POST", f"{self.upload_path.rstrip('/')}/{media_id}/finalize"
+        )
+        if (finalized.get("data") or {}).get("processing_info"):
             await self._wait_for_processing(media_id)
         return media_id
 
@@ -106,9 +118,10 @@ class XClient:
         return media_id
 
     async def _wait_for_processing(self, media_id: str) -> None:
-        path = f"{self.upload_path.rstrip('/')}/{media_id}"
         for _ in range(self.attempts * 10):
-            payload = await self._request("GET", path)
+            payload = await self._request(
+                "GET", self.upload_path, params={"media_id": media_id, "command": "STATUS"}
+            )
             info = (payload.get("data") or {}).get("processing_info") or payload.get(
                 "processing_info"
             )

@@ -112,7 +112,7 @@ X_USER_ACCESS_TOKEN=
 
 草稿模式不调用 X API。发布模式还需要用户确认转载授权。图片最多四张一条推文，超过后拆 Thread；视频作为单独媒体发布。Thread 每一步都会先写入 SQLite，已成功的 tweet_id 不会重复创建。
 
-X 媒体上传路径默认为 `/2/media/upload`，可通过 `X_MEDIA_UPLOAD_PATH` 配置。X API 的媒体上传能力和账号计费/权限以当前 X Developer 文档为准，不假定旧版免费额度；已废弃的 `update_with_media` 不会被使用。
+X 媒体上传使用当前 v2 分段流程：`/2/media/upload/initialize`、`/{media_id}/append`、`/{media_id}/finalize` 和 processing status；视频/图片用户授权需要包含 `media.write`。X API 的媒体上传能力和账号计费/权限以当前 X Developer 文档为准，不假定旧版免费额度；已废弃的 `update_with_media` 不会被使用。
 
 ## Docker Compose
 

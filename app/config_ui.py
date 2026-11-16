@@ -196,7 +196,7 @@ def render_config_page(
   <p class="hint">仅绑定在 127.0.0.1。页面不会显示已保存的 token，也不会把 token 写入日志、报告或 Git。</p>
   {status}
   <div class="warning"><strong>重要：</strong>当前发布客户端使用 OAuth 2.0 的 <strong>User Access Token</strong>。
-  页面上 X 的 App-only <strong>Bearer Token</strong> 不能代表你的账号发帖；请填写为 @hugmygirl 生成的 OAuth 2.0 Access Token。</div>
+  页面上 X 的 App-only <strong>Bearer Token</strong> 不能代表你的账号发帖；请填写为 @hugmygirl 生成的 OAuth 2.0 Access Token。发布图片或视频时还需要重新授权 <code>media.write</code> scope。</div>
   <form method="post" action="/save">
     <input type="hidden" name="csrf" value="{html.escape(csrf_token, quote=True)}">
     <h2>X 凭证</h2>
