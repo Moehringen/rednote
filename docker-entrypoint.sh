@@ -2,11 +2,12 @@
 set -eu
 
 if [ "${REMOTE_DESKTOP:-false}" = "true" ]; then
-    # The image runs as an unprivileged user.  Xvfb cannot create this
-    # directory itself when it is absent, which makes Chromium exit with a
-    # misleading crashpad/SIGTRAP error on some ARM64 hosts.
-    mkdir -p /tmp/.X11-unix
-    chmod 1777 /tmp/.X11-unix
+    # This directory is created as root in the image.  Xorg requires it to
+    # remain root-owned even though the display server runs as app.
+    if [ ! -d /tmp/.X11-unix ]; then
+        echo "missing root-owned /tmp/.X11-unix directory" >&2
+        exit 1
+    fi
     Xvfb :99 -screen 0 1440x1000x24 -nolisten tcp &
     xvfb_pid=$!
     i=0

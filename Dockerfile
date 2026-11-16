@@ -27,6 +27,9 @@ RUN addgroup --system --gid 10001 app \
     && adduser --system --uid 10001 --gid 10001 --home /home/app app \
     && mkdir -p /app/data/test_latest /app/data/xhs-config /app/data/xhs-cache /app/data/cookies \
     && chown -R 10001:10001 /app /home/app
+RUN mkdir -p /tmp/.X11-unix \
+    && chown root:root /tmp/.X11-unix \
+    && chmod 1777 /tmp/.X11-unix
 ENV HOME=/home/app
 USER 10001:10001
 VOLUME ["/app/data"]
