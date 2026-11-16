@@ -185,7 +185,11 @@ class BrowserXhsClient:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-        await self._wait_for_cdp(endpoint)
+        try:
+            await self._wait_for_cdp(endpoint)
+        except XhsCLIError:
+            await self._stop_browser_process()
+            raise
         self._browser = await self._playwright.chromium.connect_over_cdp(endpoint)
         self._context = self._browser.contexts[0] if self._browser.contexts else None
         if self._context is None:
@@ -209,6 +213,19 @@ class BrowserXhsClient:
             await asyncio.sleep(0.1)
         raise XhsCLIError("browser remote debugging endpoint did not become ready")
 
+    async def _stop_browser_process(self) -> None:
+        process = self._browser_process
+        if process is None:
+            return
+        if process.poll() is None:
+            process.terminate()
+        try:
+            await asyncio.to_thread(process.wait, 5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            await asyncio.to_thread(process.wait, 5)
+        self._browser_process = None
+
     def _browser_executable(self) -> Path:
         if self.executable_path:
             executable = Path(self.executable_path).expanduser()
@@ -230,13 +247,7 @@ class BrowserXhsClient:
             self._context = None
         if self._playwright is not None:
             await self._playwright.stop()
-        if self._browser_process is not None and self._browser_process.poll() is None:
-            self._browser_process.terminate()
-            try:
-                await asyncio.to_thread(self._browser_process.wait, 5)
-            except subprocess.TimeoutExpired:
-                self._browser_process.kill()
-        self._browser_process = None
+        await self._stop_browser_process()
         self._browser = None
         self._page = None
         self._playwright = None

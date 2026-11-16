@@ -11,6 +11,13 @@ if [ "${REMOTE_DESKTOP:-false}" = "true" ]; then
     export XDG_CACHE_HOME=/tmp/.cache
     export XDG_DATA_HOME=/tmp/.local/share
     export XDG_RUNTIME_DIR=/tmp/runtime
+    # A container restart cannot leave a live Chromium process behind, but a
+    # forced stop can leave these profile lock links.  They are ephemeral
+    # runtime state, not cookies or session data.
+    browser_profile_dir="${BROWSER_PROFILE_DIR:-/app/data/browser-profile}"
+    rm -f "$browser_profile_dir/SingletonCookie" \
+        "$browser_profile_dir/SingletonLock" \
+        "$browser_profile_dir/SingletonSocket"
     # This directory is created as root in the image.  Xorg requires it to
     # remain root-owned even though the display server runs as app.
     if [ ! -d /tmp/.X11-unix ]; then
