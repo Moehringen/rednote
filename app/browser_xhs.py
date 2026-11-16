@@ -137,6 +137,13 @@ class BrowserXhsClient:
         self._context = None
         self._page = None
         self._browser_process: subprocess.Popen[bytes] | None = None
+        self.attach_existing = os.getenv("BROWSER_ATTACH_EXISTING", "false").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        self.remote_debugging_port = int(os.getenv("BROWSER_REMOTE_DEBUGGING_PORT", "9222"))
         self._identity: ProfileIdentity | None = None
 
     async def _start(self) -> None:
@@ -150,53 +157,57 @@ class BrowserXhsClient:
             ) from exc
         self.browser_profile_dir.mkdir(parents=True, exist_ok=True)
         self._playwright = await async_playwright().start()
-        executable = self._browser_executable()
-        port = 9222
-        command = [
-            str(executable),
-            "--no-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-breakpad",
-            "--disable-crash-reporter",
-            "--no-first-run",
-            "--no-default-browser-check",
-            f"--user-data-dir={self.browser_profile_dir}",
-            "--remote-debugging-address=127.0.0.1",
-            f"--remote-debugging-port={port}",
-            "--remote-allow-origins=*",
-            "--window-size=1440,1000",
-        ]
-        if self.headless:
-            command.append("--headless=new")
-        command.append("about:blank")
-        browser_env = os.environ.copy()
-        browser_env["CHROME_CRASHPAD_DISABLE"] = "1"
-        self._browser_process = subprocess.Popen(
-            command,
-            env=browser_env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        endpoint = f"http://127.0.0.1:{port}"
-        for _ in range(150):
-            if self._browser_process.poll() is not None:
-                raise XhsCLIError("browser process exited before its remote debugging endpoint became ready")
-            try:
-                async with httpx.AsyncClient(timeout=1) as client:
-                    response = await client.get(f"{endpoint}/json/version")
-                if response.is_success:
-                    break
-            except httpx.HTTPError:
-                pass
-            await asyncio.sleep(0.1)
-        else:
-            raise XhsCLIError("browser remote debugging endpoint did not become ready")
+        endpoint = f"http://127.0.0.1:{self.remote_debugging_port}"
+        if not self.attach_existing:
+            executable = self._browser_executable()
+            command = [
+                str(executable),
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-breakpad",
+                "--disable-crash-reporter",
+                "--no-first-run",
+                "--no-default-browser-check",
+                f"--user-data-dir={self.browser_profile_dir}",
+                "--remote-debugging-address=127.0.0.1",
+                f"--remote-debugging-port={self.remote_debugging_port}",
+                "--remote-allow-origins=*",
+                "--window-size=1440,1000",
+            ]
+            if self.headless:
+                command.append("--headless=new")
+            command.append("about:blank")
+            browser_env = os.environ.copy()
+            browser_env["CHROME_CRASHPAD_DISABLE"] = "1"
+            self._browser_process = subprocess.Popen(
+                command,
+                env=browser_env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        await self._wait_for_cdp(endpoint)
         self._browser = await self._playwright.chromium.connect_over_cdp(endpoint)
         self._context = self._browser.contexts[0] if self._browser.contexts else None
         if self._context is None:
             raise XhsCLIError("browser remote debugging returned no persistent context")
         self._page = self._context.pages[0] if self._context.pages else await self._context.new_page()
         self._page.set_default_timeout(15_000)
+
+    async def _wait_for_cdp(self, endpoint: str) -> None:
+        for _ in range(150):
+            if self._browser_process is not None and self._browser_process.poll() is not None:
+                raise XhsCLIError(
+                    "browser process exited before its remote debugging endpoint became ready"
+                )
+            try:
+                async with httpx.AsyncClient(timeout=1) as client:
+                    response = await client.get(f"{endpoint}/json/version")
+                if response.is_success:
+                    return
+            except httpx.HTTPError:
+                pass
+            await asyncio.sleep(0.1)
+        raise XhsCLIError("browser remote debugging endpoint did not become ready")
 
     def _browser_executable(self) -> Path:
         if self.executable_path:
@@ -213,7 +224,7 @@ class BrowserXhsClient:
         return Path(self._playwright.chromium.executable_path)
 
     async def close(self) -> None:
-        if self._browser is not None:
+        if self._browser is not None and not self.attach_existing:
             await self._browser.close()
         if self._context is not None:
             self._context = None
