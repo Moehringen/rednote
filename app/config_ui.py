@@ -31,7 +31,7 @@ PUBLIC_KEYS = (
 DEFAULTS = {
     "MODE": "draft",
     "REPOST_AUTHORIZED": "false",
-    "X_TAGS": "#Xiaohongshu #Photography",
+    "X_TAGS": "#Xiaohongshu #Fashion #StyleInspiration #OutfitIdeas #Photography",
     "X_API_BASE_URL": "https://api.x.com",
     "X_MEDIA_UPLOAD_PATH": "/2/media/upload",
     "X_MAX_CHARS": "280",
@@ -207,7 +207,7 @@ def render_config_page(
     <label><input type="checkbox" name="REPOST_AUTHORIZED" value="on"{checked('REPOST_AUTHORIZED')}>我确认已取得第三方内容的转载授权</label>
     <label>开启 publish 时输入 <code>I UNDERSTAND</code><input type="text" name="PUBLISH_CONFIRM" autocomplete="off" placeholder="默认不会开启 publish"></label>
     <h2>推文选项</h2>
-    <label>标签<input name="X_TAGS" value="{value('X_TAGS')}" placeholder="#Xiaohongshu #Photography"></label>
+    <label>标签<input name="X_TAGS" value="{value('X_TAGS')}" placeholder="#Xiaohongshu #Fashion #StyleInspiration #OutfitIdeas #Photography"></label>
     <label>X API Base URL<input name="X_API_BASE_URL" value="{value('X_API_BASE_URL')}"></label>
     <label>媒体上传路径<input name="X_MEDIA_UPLOAD_PATH" value="{value('X_MEDIA_UPLOAD_PATH')}"></label>
     <label>单条推文最大字符数<input name="X_MAX_CHARS" value="{value('X_MAX_CHARS')}" inputmode="numeric"></label>

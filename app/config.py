@@ -100,7 +100,12 @@ class Settings:
             x_api_base_url=os.getenv("X_API_BASE_URL", "https://api.x.com").rstrip("/"),
             x_user_access_token=os.getenv("X_USER_ACCESS_TOKEN", ""),
             x_max_chars=int(os.getenv("X_MAX_CHARS", "280")),
-            x_tags=_tags(os.getenv("X_TAGS", "#Xiaohongshu #Photography")),
+            x_tags=_tags(
+                os.getenv(
+                    "X_TAGS",
+                    "#Xiaohongshu #Fashion #StyleInspiration #OutfitIdeas #Photography",
+                )
+            ),
             x_media_upload_path=os.getenv("X_MEDIA_UPLOAD_PATH", "/2/media/upload"),
             translation_provider=provider,
             mymemory_base_url=os.getenv(

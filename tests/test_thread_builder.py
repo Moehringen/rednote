@@ -26,3 +26,15 @@ def test_long_text_is_split_and_attributed() -> None:
     assert len(posts) > 2
     assert all(len(post.text) <= 100 for post in posts)
     assert "Source:" in posts[0].text
+
+
+def test_configured_english_tags_are_added_to_first_post() -> None:
+    note = Note("000000000000000000000001", "Author", "Title", "Body", "video", None)
+    posts = build_thread(
+        note,
+        Translation("Title", "Body"),
+        [Path("data/video.mp4")],
+        "https://xhslink.cn/o/example",
+        tags=("#Fashion", "StyleInspiration", "#Fashion"),
+    )
+    assert "#Fashion #StyleInspiration" in posts[0].text
