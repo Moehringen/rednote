@@ -53,3 +53,34 @@ def test_test_latest_generates_note_translation_and_draft(tmp_path: Path, monkey
     assert (output / "translated_en.txt").read_text().startswith("Title")
     assert (output / "draft.json").exists()
     assert "target_author_match: `True`" in (output / "report.md").read_text()
+
+
+def test_publish_note_url_is_author_verified_and_deduplicated(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "data" / "state.sqlite3"))
+    monkeypatch.setenv("MODE", "publish")
+    monkeypatch.setenv("REPOST_AUTHORIZED", "true")
+    monkeypatch.setenv("X_USER_ACCESS_TOKEN", "test-token")
+    settings = Settings.from_env(None)
+
+    async def fake_download(note, output_dir, timeout, attempts):
+        image = output_dir / "images" / "01.jpg"
+        image.parent.mkdir(parents=True, exist_ok=True)
+        image.write_bytes(b"fixture")
+        return [image]
+
+    monkeypatch.setattr("app.pipeline.download_note_media", fake_download)
+    pipeline = Pipeline(settings, xhs_client=FakeXhs(), translator=FakeTranslator())
+    published: list[str] = []
+
+    async def fake_publish(note, posts, errors):
+        published.append(note.note_id)
+        pipeline.store.set_status(note.note_id, "published", tweet_ids=["tweet-1"])
+
+    monkeypatch.setattr(pipeline, "_publish", fake_publish)
+    first = asyncio.run(pipeline.publish_note_url("https://xhslink.cn/o/test"))
+    second = asyncio.run(pipeline.publish_note_url("https://xhslink.cn/o/test"))
+
+    assert first.name == "report.md"
+    assert published == ["000000000000000000000010"]
+    assert "already has publication state published" in second.read_text()

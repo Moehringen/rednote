@@ -201,6 +201,37 @@ class Pipeline:
                 identity,
             )
 
+    async def publish_note_url(self, source_url: str) -> Path:
+        """Publish one explicitly supplied, author-verified note URL once."""
+        report_dir = self.settings.data_dir / "daily"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        identity = None
+        try:
+            identity = await self.xhs.resolve_profile_identity(
+                self.settings.profile_url,
+                self.settings.expected_user_id,
+                self.settings.target_nickname,
+            )
+            note = await self.xhs.note_from_url(source_url)
+            if note.author_user_id != identity.user_id or note.author != identity.nickname:
+                raise XhsCLIError("explicit note URL failed target author verification")
+            # Seed the row before publishing so progress/tweet IDs are durable
+            # even when this explicitly requested note was not discovered by the daemon.
+            self.store.upsert_discovered(note.note_id, note.source_url)
+            row = self.store.get(note.note_id)
+            if row and row["status"] in {"published", "publishing", "publish_unknown"}:
+                raise XhsCLIError(
+                    f"note {note.note_id} already has publication state {row['status']}; "
+                    "refusing duplicate post"
+                )
+            return await self._process_note(
+                note, report_dir, "publish-note-url", identity, []
+            )
+        except (XhsCLIError, OSError, ValueError) as exc:
+            return self._write_report(
+                report_dir, None, [str(exc)], [], None, "publish-note-url", identity
+            )
+
     async def _fetch_process_report(
         self,
         source_url: str,

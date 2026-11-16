@@ -31,6 +31,10 @@ def parser() -> argparse.ArgumentParser:
         help="publish the Nth newest verified non-pinned profile note once",
     )
     result.add_argument(
+        "--publish-note-url",
+        help="publish one explicitly supplied, author-verified note URL once",
+    )
+    result.add_argument(
         "--run-once",
         action="store_true",
         help="discover profile notes and process at most one new note",
@@ -115,6 +119,11 @@ async def main_async(args: argparse.Namespace) -> int:
         if args.test_latest:
             with collector_lock(settings.data_dir / ".collector.lock"):
                 report = await pipeline.test_latest(args.note_url)
+            print(report)
+            return 0
+        if args.publish_note_url:
+            with collector_lock(settings.data_dir / ".collector.lock"):
+                report = await pipeline.publish_note_url(args.publish_note_url)
             print(report)
             return 0
         if args.test_profile_latest:
