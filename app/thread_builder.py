@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -36,32 +37,60 @@ def _chunks(text: str, max_chars: int) -> list[str]:
     return chunks
 
 
-def _normalize_tags(tags: tuple[str, ...] | list[str] | None) -> str:
+_BLOCKED_TAGS = {"#xiaohongshu", "#rednote", "#小红书"}
+
+
+def _normalize_tag_pool(tags: tuple[str, ...] | list[str] | None) -> list[str]:
     if not tags:
-        return ""
+        return []
     result: list[str] = []
+    seen: set[str] = set()
     for tag in tags:
         value = tag.strip()
-        if value:
-            result.append(value if value.startswith("#") else f"#{value}")
-    return " ".join(dict.fromkeys(result))
+        if not value:
+            continue
+        value = value if value.startswith("#") else f"#{value}"
+        normalized = value.casefold()
+        if normalized in _BLOCKED_TAGS or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(value)
+    return result
+
+
+def select_tags(
+    note_id: str,
+    tags: tuple[str, ...] | list[str] | None,
+    count: int = 4,
+) -> tuple[str, ...]:
+    """Select a stable, note-specific subset so retries keep the same draft."""
+    pool = _normalize_tag_pool(tags)
+    if count <= 0 or not pool:
+        return ()
+    if count >= len(pool):
+        return tuple(pool)
+    return tuple(random.Random(note_id).sample(pool, count))
+
+
+def _format_tags(tags: tuple[str, ...]) -> str:
+    return " ".join(tags)
 
 
 def build_thread(
     note: Note,
     translation: Translation,
     media_paths: list[Path],
-    source_url: str,
+    _source_url: str,
     max_chars: int = 280,
     tags: tuple[str, ...] | list[str] | None = None,
+    tag_count: int = 4,
 ) -> list[DraftPost]:
-    attribution = f"Source: {source_url}"
-    tag_line = _normalize_tags(tags)
+    tag_line = _format_tags(select_tags(note.note_id, tags, tag_count))
     main = translation.as_text().strip()
-    first_suffix = "\n\n".join(part for part in (attribution, tag_line) if part)
-    available = max(1, max_chars - len(first_suffix) - 2)
+    suffix = tag_line
+    available = max(1, max_chars - len(suffix) - 2)
     text_parts = _chunks(main, available) if main else [""]
-    text_parts[0] = "\n\n".join(part for part in (text_parts[0], first_suffix) if part)
+    text_parts[0] = "\n\n".join(part for part in (text_parts[0], suffix) if part)
 
     if note.note_type == "video":
         video_path = str(media_paths[0]) if media_paths else None
@@ -77,8 +106,6 @@ def build_thread(
     for index in range(count):
         if index < len(text_parts):
             text = text_parts[index]
-        elif index == count - 1:
-            text = attribution
         else:
             text = f"({index + 1}/{count})"
         if len(text) > max_chars:

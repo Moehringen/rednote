@@ -13,7 +13,7 @@
 4. 对候选笔记读取详情，按详情中的真实发布时间排序；`xhs-cli` 未暴露置顶字段，因此报告会明确标记置顶状态未验证。
 5. 下载图文笔记全部图片，或下载视频笔记的可播放视频 URL；视频封面不会被当成完整图文。
 6. 默认通过 MyMemory 翻译标题和正文，也可切换 LibreTranslate。
-7. 加入来源链接、可配置标签，生成单条推文或 Thread 草稿。
+7. 保存来源 URL 到元数据和报告（不写入推文正文），从可配置的人像/女性摄影标签池中为每篇笔记稳定随机抽取标签，生成单条推文或 Thread 草稿。
 8. SQLite 记录 baseline、处理状态、tweet_id、媒体 ID 和错误原因，避免重启重复发布。
 
 ## 本机持久浏览器后端
@@ -68,6 +68,11 @@ v0.2.0 的 Go module 要求 Go 1.26；没有 Go 环境时可直接使用 Docker 
 - `X_POST_API_VERSION=v2`（默认）：发帖走当前 `POST /2/tweets`，需要当前 Project 权限。
 - `X_POST_API_VERSION=v1.1`：免费旧 App 兼容路径，发帖走 `POST /1.1/statuses/update.json`，仅允许和 OAuth1 一起使用。该接口属于旧版接口，可能被 X 限制或下线；系统仍不使用已废弃的 `update_with_media`。
 
+配置页按版本分区保存凭证：
+
+- V1 区域是 OAuth 1.0a 的四项用户凭证：Consumer/API Key、API Secret、OAuth1 User Access Token、OAuth1 User Access Token Secret。
+- V2 区域是 OAuth 2.0 的 Client ID、Client Secret、User Access Token，以及可选的 App-only Bearer Token。Bearer Token 只能用于不需要用户身份的公开数据只读请求，不能用于 `POST /2/tweets`；V2 发帖必须使用 User Access Token，并申请 `tweet.write`、`users.read` 和媒体所需的 `media.write` 权限。
+
 可以先做不发帖的鉴权检查：
 
 ```sh
@@ -114,6 +119,10 @@ LIBRETRANSLATE_API_KEY=
 ```
 
 翻译模块会保护原文中的 hashtag，不会自动添加原文没有的事实。翻译失败时不会进入发布流程。
+
+### X 标签池
+
+`X_TAG_POOL` 使用空格分隔，默认预留了一组人像摄影、女性肖像、时尚和视觉叙事标签；`X_TAG_COUNT=4` 控制每篇抽取数量。抽取以 `note_id` 为种子，因此同一篇笔记重试时标签保持一致。系统会过滤 `#Xiaohongshu`、`#Rednote` 和 `#小红书` 等来源平台标签。来源链接仍保存在 `note.json`、`report.md` 和 SQLite 中，但不会出现在推文文本中。
 
 ## X 发布门禁
 

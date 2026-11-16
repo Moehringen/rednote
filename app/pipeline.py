@@ -261,7 +261,8 @@ class Pipeline:
                     media_paths,
                     note.source_url,
                     self.settings.x_max_chars,
-                    self.settings.x_tags,
+                    self.settings.x_tag_pool,
+                    self.settings.x_tag_count,
                 )
                 _write_json(output_dir / "draft.json", draft_to_dict(posts))
             elif translation:
@@ -274,7 +275,8 @@ class Pipeline:
                         media_paths,
                         note.source_url,
                         self.settings.x_max_chars,
-                        self.settings.x_tags,
+                        self.settings.x_tag_pool,
+                        self.settings.x_tag_count,
                     )
                     _write_json(output_dir / "draft.json", draft_to_dict(posts))
                 except ValueError as exc:
@@ -459,7 +461,8 @@ class Pipeline:
                     media_paths,
                     note.source_url,
                     self.settings.x_max_chars,
-                    self.settings.x_tags,
+                    self.settings.x_tag_pool,
+                    self.settings.x_tag_count,
                 )
                 _write_json(note_dir / "draft.json", draft_to_dict(posts))
             except ValueError as exc:
@@ -500,8 +503,11 @@ class Pipeline:
             media_base_url=self.settings.x_media_upload_base_url,
         )
         saved_tweet_ids, saved_media_ids = self.store.get_publish_state(note.note_id)
+        current_media_ids = dict(saved_media_ids)
 
         def progress(tweet_ids: list[str], media_ids: dict[str, list[str]]) -> None:
+            nonlocal current_media_ids
+            current_media_ids = dict(media_ids)
             self.store.set_status(
                 note.note_id, "publishing", tweet_ids=tweet_ids, media_ids=media_ids
             )
@@ -511,7 +517,7 @@ class Pipeline:
                 posts, saved_tweet_ids, saved_media_ids, progress
             )
             self.store.set_status(
-                note.note_id, "published", tweet_ids=tweet_ids, media_ids=saved_media_ids
+                note.note_id, "published", tweet_ids=tweet_ids, media_ids=current_media_ids
             )
         except XAPIError as exc:
             self.store.set_status(
@@ -519,7 +525,7 @@ class Pipeline:
                 "publish_unknown",
                 error_reason=str(exc),
                 tweet_ids=saved_tweet_ids,
-                media_ids=saved_media_ids,
+                media_ids=current_media_ids,
             )
             errors.append(f"publish stopped for reconciliation: {exc}")
 

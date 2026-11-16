@@ -23,6 +23,21 @@ def _tags(value: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(result))
 
 
+DEFAULT_TAG_POOL = (
+    "#PortraitPhotography #Portraits #PortraitMood #PortraitInspiration "
+    "#PortraitArt #PortraitStyle #BeautyPortrait #BeautyPhotography "
+    "#WomensPortraits #WomenInPhotography #FemalePortrait #ModelPhotography "
+    "#ModelPortrait #FashionPortrait #FashionPhotography #EditorialPortrait "
+    "#EditorialFashion #StreetPortrait #StreetPhotography #LifestylePhotography "
+    "#CinematicPortrait #CinematicPhotography #MoodyPortraits #NaturalLightPortrait "
+    "#GoldenHourPortrait #SoftLight #CreativePortrait #FineArtPortrait "
+    "#VisualStorytelling #PhotoInspiration #PhotographyLovers #PhotographyDaily "
+    "#PhotoOfTheDay #Portraiture #BeautifulWomen #BeautyInspiration "
+    "#StyleInspiration #OutfitInspiration #FilmLook #AestheticPhotography "
+    "#ArtPhotography #PhotographyCommunity #BehindThePortrait"
+)
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     xhs_backend: str
@@ -43,12 +58,14 @@ class Settings:
     x_auth_mode: str
     x_post_api_version: str
     x_user_access_token: str
+    x_bearer_token: str
     x_api_key: str
     x_api_secret: str
     x_access_token: str
     x_access_token_secret: str
     x_max_chars: int
-    x_tags: tuple[str, ...]
+    x_tag_pool: tuple[str, ...]
+    x_tag_count: int
     x_media_upload_base_url: str
     x_media_upload_path: str
     translation_provider: str
@@ -114,17 +131,16 @@ class Settings:
             x_auth_mode=x_auth_mode,
             x_post_api_version=x_post_api_version,
             x_user_access_token=os.getenv("X_USER_ACCESS_TOKEN", ""),
+            x_bearer_token=os.getenv("X_BEARER_TOKEN", ""),
             x_api_key=os.getenv("X_API_KEY", ""),
             x_api_secret=os.getenv("X_API_SECRET", ""),
             x_access_token=os.getenv("X_ACCESS_TOKEN", ""),
             x_access_token_secret=os.getenv("X_ACCESS_TOKEN_SECRET", ""),
             x_max_chars=int(os.getenv("X_MAX_CHARS", "280")),
-            x_tags=_tags(
-                os.getenv(
-                    "X_TAGS",
-                    "#Xiaohongshu #Fashion #StyleInspiration #OutfitIdeas #Photography",
-                )
+            x_tag_pool=_tags(
+                os.getenv("X_TAG_POOL", os.getenv("X_TAGS", DEFAULT_TAG_POOL))
             ),
+            x_tag_count=max(0, int(os.getenv("X_TAG_COUNT", "4"))),
             x_media_upload_base_url=os.getenv(
                 "X_MEDIA_UPLOAD_BASE_URL", "https://upload.x.com"
             ).rstrip("/"),

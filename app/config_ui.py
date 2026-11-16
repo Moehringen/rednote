@@ -12,27 +12,30 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 SECRET_KEYS = (
-    "X_USER_ACCESS_TOKEN",
     "X_API_KEY",
     "X_API_SECRET",
     "X_ACCESS_TOKEN",
     "X_ACCESS_TOKEN_SECRET",
+    "X_USER_ACCESS_TOKEN",
+    "X_BEARER_TOKEN",
     "X_CLIENT_ID",
     "X_CLIENT_SECRET",
 )
 SECRET_LABELS = {
-    "X_USER_ACCESS_TOKEN": "OAuth2 User Access Token（OAuth2，不用于 OAuth1）",
-    "X_API_KEY": "Consumer Key / Consumer API Key（OAuth1）",
-    "X_API_SECRET": "Consumer Secret / API Key Secret（OAuth1）",
+    "X_API_KEY": "Consumer Key / Consumer API Key（V1 OAuth1）",
+    "X_API_SECRET": "Consumer Secret / API Key Secret（V1 OAuth1）",
     "X_ACCESS_TOKEN": "OAuth1 User Access Token（OAuth1）",
     "X_ACCESS_TOKEN_SECRET": "OAuth1 Access Token Secret（OAuth1）",
+    "X_USER_ACCESS_TOKEN": "OAuth2 User Access Token（V2 用户授权，可发帖）",
+    "X_BEARER_TOKEN": "OAuth2 App-only Bearer Token（V2 只读）",
     "X_CLIENT_ID": "OAuth2 Client ID（OAuth2 PKCE）",
     "X_CLIENT_SECRET": "OAuth2 Client Secret（OAuth2 PKCE）",
 }
 PUBLIC_KEYS = (
     "MODE",
     "REPOST_AUTHORIZED",
-    "X_TAGS",
+    "X_TAG_POOL",
+    "X_TAG_COUNT",
     "X_API_BASE_URL",
     "X_AUTH_MODE",
     "X_POST_API_VERSION",
@@ -43,7 +46,20 @@ PUBLIC_KEYS = (
 DEFAULTS = {
     "MODE": "draft",
     "REPOST_AUTHORIZED": "false",
-    "X_TAGS": "#Xiaohongshu #Fashion #StyleInspiration #OutfitIdeas #Photography",
+    "X_TAG_POOL": (
+        "#PortraitPhotography #Portraits #PortraitMood #PortraitInspiration "
+        "#PortraitArt #PortraitStyle #BeautyPortrait #BeautyPhotography "
+        "#WomensPortraits #WomenInPhotography #FemalePortrait #ModelPhotography "
+        "#ModelPortrait #FashionPortrait #FashionPhotography #EditorialPortrait "
+        "#EditorialFashion #StreetPortrait #StreetPhotography #LifestylePhotography "
+        "#CinematicPortrait #CinematicPhotography #MoodyPortraits #NaturalLightPortrait "
+        "#GoldenHourPortrait #SoftLight #CreativePortrait #FineArtPortrait "
+        "#VisualStorytelling #PhotoInspiration #PhotographyLovers #PhotographyDaily "
+        "#PhotoOfTheDay #Portraiture #BeautifulWomen #BeautyInspiration "
+        "#StyleInspiration #OutfitInspiration #FilmLook #AestheticPhotography "
+        "#ArtPhotography #PhotographyCommunity #BehindThePortrait"
+    ),
+    "X_TAG_COUNT": "4",
     "X_API_BASE_URL": "https://api.x.com",
     "X_AUTH_MODE": "oauth2",
     "X_POST_API_VERSION": "v2",
@@ -177,11 +193,22 @@ def render_config_page(
     def checked(key: str) -> str:
         return " checked" if str(values.get(key, "")).lower() == "true" else ""
 
-    secret_rows = "\n".join(
-        f'<label>{html.escape(SECRET_LABELS[key])} '
-        f'<code>{html.escape(key)}</code><input type="password" name="{html.escape(key)}" '
-        f'autocomplete="new-password" placeholder="{("已保存，留空保持不变" if secret_status.get(key) else "未设置")}"></label>'
-        for key in SECRET_KEYS
+    def secret_field(key: str) -> str:
+        placeholder = "已保存，留空保持不变" if secret_status.get(key) else "未设置"
+        return (
+            f'<label>{html.escape(SECRET_LABELS[key])} '
+            f'<code>{html.escape(key)}</code><input type="password" '
+            f'name="{html.escape(key)}" autocomplete="new-password" '
+            f'placeholder="{html.escape(placeholder, quote=True)}"></label>'
+        )
+
+    v1_secret_fields = "\n".join(
+        secret_field(key)
+        for key in ("X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET")
+    )
+    v2_secret_fields = "\n".join(
+        secret_field(key)
+        for key in ("X_CLIENT_ID", "X_CLIENT_SECRET", "X_USER_ACCESS_TOKEN", "X_BEARER_TOKEN")
     )
     status = (
         f'<p class="ok">{html.escape(message)}</p>'
@@ -202,6 +229,9 @@ def render_config_page(
     input, select {{ display: block; width: 100%; box-sizing: border-box; margin-top: 5px; padding: 10px; border: 1px solid #cbd3df; border-radius: 7px; font: inherit; }}
     input[type=checkbox] {{ display: inline-block; width: auto; margin-right: 8px; }}
     .hint {{ color: #526174; font-size: .92rem; }} .warning {{ background: #fff6df; padding: 12px; border-radius: 8px; }}
+    .credential-panel {{ margin-top: 18px; padding: 16px 18px; border: 1px solid #d7dee8; border-radius: 10px; }}
+    .credential-panel h3 {{ margin: 0 0 6px; }} .credential-panel.v1 {{ border-left: 5px solid #7b8798; }}
+    .credential-panel.v2 {{ border-left: 5px solid #2563eb; }} .credential-panel .hint {{ margin-top: 4px; }}
     .ok {{ color: #087443; background: #e9f8ef; padding: 10px; border-radius: 8px; }} .error {{ color: #a31b1b; background: #ffeded; padding: 10px; border-radius: 8px; }}
     button {{ margin-top: 20px; padding: 11px 18px; border: 0; border-radius: 7px; background: #111827; color: white; font: inherit; cursor: pointer; }}
     code {{ background: #eef1f5; padding: 2px 4px; border-radius: 4px; }}
@@ -211,24 +241,34 @@ def render_config_page(
   <h1>小红书 → X 本地配置</h1>
   <p class="hint">仅绑定在 127.0.0.1。页面不会显示已保存的 token，也不会把 token 写入日志、报告或 Git。</p>
   {status}
-  <div class="warning"><strong>重要：</strong>可选择 OAuth 2.0 或旧 App OAuth 1.0a。
-  OAuth 2.0 需要用户 token 和媒体权限；OAuth 1.0a 需要 Consumer Key、Consumer Secret、Access Token、Access Token Secret 四项。
-  App-only <strong>Bearer Token</strong> 不能代表你的账号发帖。OAuth1 媒体上传使用当前兼容的分段媒体接口，不使用已废弃的 <code>update_with_media</code>。</div>
+  <div class="warning"><strong>认证说明：</strong>V2 的 Consumer Key/Secret 和 Bearer Token 只能证明 App 身份；Bearer Token 是 App-only，只读，不能代表你的账号发帖。
+  V2 发帖必须使用 OAuth2 User Access Token；V1 旧路线必须填写 OAuth1 四项用户凭证。</div>
   <form method="post" action="/save">
     <input type="hidden" name="csrf" value="{html.escape(csrf_token, quote=True)}">
-    <h2>X 凭证</h2>
-    <p class="hint">选择 <code>oauth1</code> 时填写 OAuth 1.0a 的四项凭证；选择 <code>oauth2</code> 时填写 OAuth 2.0 User Access Token。留空会保留已保存值。</p>
-    {secret_rows}
+    <h2>X 凭证（按版本分区）</h2>
+    <p class="hint">留空会保留已保存值。页面不会回显任何 secret、token 或 Bearer Token。</p>
+    <section class="credential-panel v1">
+      <h3>V1 · OAuth 1.0a（旧版兼容）</h3>
+      <p class="hint">旧 App 用户上下文。只有四项都齐全时，才能走 OAuth1；V1.1 接口已属于兼容路线。</p>
+      {v1_secret_fields}
+    </section>
+    <section class="credential-panel v2">
+      <h3>V2 · OAuth 2.0（当前推荐）</h3>
+      <p class="hint">Consumer Key/Secret 与 Bearer Token 是 App-only 凭证，主要用于公开数据只读；真正发帖要填写 User Access Token，并在 X App 权限中启用 <code>tweet.write</code>、<code>users.read</code>、<code>media.write</code>。</p>
+      {v2_secret_fields}
+    </section>
     <h2>发布门禁</h2>
     <label>运行模式<select name="MODE"><option value="draft"{' selected' if str(values.get('MODE', 'draft')) == 'draft' else ''}>draft（只生成草稿）</option><option value="publish"{' selected' if str(values.get('MODE', 'draft')) == 'publish' else ''}>publish（允许发布）</option></select></label>
     <label><input type="checkbox" name="REPOST_AUTHORIZED" value="on"{checked('REPOST_AUTHORIZED')}>我确认已取得第三方内容的转载授权</label>
     <label>开启 publish 时输入 <code>I UNDERSTAND</code><input type="text" name="PUBLISH_CONFIRM" autocomplete="off" placeholder="默认不会开启 publish"></label>
     <h2>推文选项</h2>
-    <label>标签<input name="X_TAGS" value="{value('X_TAGS')}" placeholder="#Xiaohongshu #Fashion #StyleInspiration #OutfitIdeas #Photography"></label>
+    <label>标签池（空格分隔）<textarea name="X_TAG_POOL" rows="4" placeholder="#PortraitPhotography #BeautyPhotography #ModelPhotography">{value('X_TAG_POOL')}</textarea></label>
+    <label>每篇随机标签数<input name="X_TAG_COUNT" value="{value('X_TAG_COUNT')}" inputmode="numeric" min="0" max="10"></label>
+    <p class="hint">每篇会从标签池中按笔记 ID 稳定随机抽取；同一篇重试时标签不变。系统会自动排除 <code>#Xiaohongshu</code>、<code>#Rednote</code> 等来源平台标签。来源链接仍保存在元数据和报告中，但不会写入推文正文。</p>
     <label>X API Base URL<input name="X_API_BASE_URL" value="{value('X_API_BASE_URL')}"></label>
-    <label>认证模式<select name="X_AUTH_MODE"><option value="oauth2"{' selected' if str(values.get('X_AUTH_MODE', 'oauth2')) == 'oauth2' else ''}>OAuth 2.0 User Token</option><option value="oauth1"{' selected' if str(values.get('X_AUTH_MODE', 'oauth2')) == 'oauth1' else ''}>OAuth 1.0a 旧 App</option><option value="auto"{' selected' if str(values.get('X_AUTH_MODE', 'oauth2')) == 'auto' else ''}>自动选择（完整 OAuth1 优先）</option></select></label>
-    <label>发帖接口<select name="X_POST_API_VERSION"><option value="v2"{' selected' if str(values.get('X_POST_API_VERSION', 'v2')) == 'v2' else ''}>当前 v2（需要项目权限）</option><option value="v1.1"{' selected' if str(values.get('X_POST_API_VERSION', 'v2')) == 'v1.1' else ''}>旧版 v1.1（OAuth1，已废弃）</option></select></label>
-    <p class="hint">免费旧 App 路线选择 <code>v1.1</code>。它使用 <code>/1.1/statuses/update.json</code>；X 可能随时限制或下线该接口。</p>
+    <label>认证模式<select name="X_AUTH_MODE"><option value="oauth2"{' selected' if str(values.get('X_AUTH_MODE', 'oauth2')) == 'oauth2' else ''}>V2 OAuth 2.0 User Token</option><option value="oauth1"{' selected' if str(values.get('X_AUTH_MODE', 'oauth2')) == 'oauth1' else ''}>V1 OAuth 1.0a 旧 App</option><option value="auto"{' selected' if str(values.get('X_AUTH_MODE', 'oauth2')) == 'auto' else ''}>自动选择（完整 V1 OAuth1 优先）</option></select></label>
+    <label>发帖接口<select name="X_POST_API_VERSION"><option value="v2"{' selected' if str(values.get('X_POST_API_VERSION', 'v2')) == 'v2' else ''}>V2 当前接口（推荐）</option><option value="v1.1"{' selected' if str(values.get('X_POST_API_VERSION', 'v2')) == 'v1.1' else ''}>V1.1 旧接口（OAuth1，已废弃）</option></select></label>
+    <p class="hint">V2 发帖使用 <code>POST /2/tweets</code>；V1.1 仅用于兼容旧 App。OAuth1 媒体接口不使用已废弃的 <code>update_with_media</code>。</p>
     <label>OAuth1 媒体上传 Base URL<input name="X_MEDIA_UPLOAD_BASE_URL" value="{value('X_MEDIA_UPLOAD_BASE_URL')}"></label>
     <label>媒体上传路径<input name="X_MEDIA_UPLOAD_PATH" value="{value('X_MEDIA_UPLOAD_PATH')}"></label>
     <label>单条推文最大字符数<input name="X_MAX_CHARS" value="{value('X_MAX_CHARS')}" inputmode="numeric"></label>
