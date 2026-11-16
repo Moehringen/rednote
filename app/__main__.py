@@ -89,6 +89,7 @@ async def main_async(args: argparse.Namespace) -> int:
             settings.retry_attempts,
             settings.x_max_chars,
             auth_mode=settings.x_auth_mode,
+            post_api_version=settings.x_post_api_version,
             consumer_key=settings.x_api_key,
             consumer_secret=settings.x_api_secret,
             resource_owner_key=settings.x_access_token,
@@ -100,12 +101,12 @@ async def main_async(args: argparse.Namespace) -> int:
         except XAPIError as exc:
             logging.error("X auth check failed: %s", exc)
             return 1
-        account = payload.get("data") or {}
+        account = payload.get("data") or payload
         print(
             "X auth ok: auth_mode={} user_id={} username={}".format(
                 client.auth_mode,
-                account.get("id", "unknown"),
-                account.get("username", "unknown"),
+                account.get("id") or account.get("id_str", "unknown"),
+                account.get("username") or account.get("screen_name", "unknown"),
             )
         )
         return 0

@@ -106,6 +106,40 @@ def test_oauth1_video_upload_uses_legacy_chunked_commands(tmp_path: Path) -> Non
     assert append_calls == [{"command": "APPEND", "media_id": "123", "segment_index": 0}]
 
 
+def test_oauth1_v1_1_post_uses_status_update_form() -> None:
+    client = XClient(
+        "https://api.x.com",
+        auth_mode="oauth1",
+        post_api_version="v1.1",
+        consumer_key="ck",
+        consumer_secret="cs",
+        resource_owner_key="tk",
+        resource_owner_secret="ts",
+    )
+    calls: list[tuple[str, str, dict[str, object]]] = []
+
+    async def fake_form(
+        method: str, url: str, form: dict[str, object]
+    ) -> dict[str, object]:
+        calls.append((method, url, form))
+        return {"id_str": "456"}
+
+    client._oauth1_form_request = fake_form  # type: ignore[method-assign]
+
+    assert asyncio.run(client.create_post("hello", ["123", "124"], reply_to="99")) == "456"
+    assert calls == [
+        (
+            "POST",
+            "https://api.x.com/1.1/statuses/update.json",
+            {
+                "status": "hello",
+                "media_ids": "123,124",
+                "in_reply_to_status_id": "99",
+            },
+        )
+    ]
+
+
 def test_http_error_message_keeps_safe_x_error_message() -> None:
     response = httpx.Response(
         401,

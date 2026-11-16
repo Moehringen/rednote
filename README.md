@@ -64,7 +64,9 @@ v0.2.0 的 Go module 要求 Go 1.26；没有 Go 环境时可直接使用 Docker 
 配置页面只绑定 127.0.0.1，保存目标是当前目录的 .env，写入使用原子替换并设置为 600 权限。页面不会回显已经保存的 secret，也不会记录 POST 内容。当前发布客户端支持两种用户授权：
 
 - `X_AUTH_MODE=oauth2`：使用 X Developer 页面为目标账号生成的 OAuth 2.0 User Access Token；App-only Bearer Token 不能代表账号发帖，图片/视频上传需要相应的媒体权限。
-- `X_AUTH_MODE=oauth1`：使用旧 App 的 `X_API_KEY`、`X_API_SECRET`、`X_ACCESS_TOKEN`、`X_ACCESS_TOKEN_SECRET`。OAuth1 媒体走 `upload.twitter.com/1.1/media/upload.json` 的用户上下文分段上传，发帖走当前 `POST /2/tweets`，不使用已废弃的 `update_with_media`。
+- `X_AUTH_MODE=oauth1`：使用旧 App 的 `X_API_KEY`、`X_API_SECRET`、`X_ACCESS_TOKEN`、`X_ACCESS_TOKEN_SECRET`。OAuth1 媒体走 `upload.twitter.com/1.1/media/upload.json` 的用户上下文分段上传。
+- `X_POST_API_VERSION=v2`（默认）：发帖走当前 `POST /2/tweets`，需要当前 Project 权限。
+- `X_POST_API_VERSION=v1.1`：免费旧 App 兼容路径，发帖走 `POST /1.1/statuses/update.json`，仅允许和 OAuth1 一起使用。该接口属于旧版接口，可能被 X 限制或下线；系统仍不使用已废弃的 `update_with_media`。
 
 可以先做不发帖的鉴权检查：
 
@@ -119,6 +121,7 @@ LIBRETRANSLATE_API_KEY=
 MODE=draft
 REPOST_AUTHORIZED=false
 X_AUTH_MODE=oauth1
+X_POST_API_VERSION=v1.1
 X_API_KEY=
 X_API_SECRET=
 X_ACCESS_TOKEN=
@@ -128,7 +131,7 @@ X_USER_ACCESS_TOKEN=
 
 草稿模式不调用 X API。发布模式还需要用户确认转载授权。图片最多四张一条推文，超过后拆 Thread；视频作为单独媒体发布。Thread 每一步都会先写入 SQLite，已成功的 tweet_id 不会重复创建。
 
-OAuth2 模式使用当前 v2 媒体分段流程并需要 `media.write`；OAuth1 模式使用旧 App 的 user-context 分段媒体上传，再把 media_id 交给当前 `POST /2/tweets`。X API 的媒体上传能力和账号计费/权限以当前 X Developer 文档为准；已废弃的 `update_with_media` 不会被使用。
+OAuth2 模式使用当前 v2 媒体分段流程并需要 `media.write`。OAuth1 + `X_POST_API_VERSION=v1.1` 使用旧 App 的 user-context 分段媒体上传，再把 media_id 交给 `POST /1.1/statuses/update.json`。官方文档说明 `update_with_media` 已废弃，替代方式是先上传媒体再调用 `statuses/update`；旧版接口是否仍可用以实际账号响应为准。
 
 ## Docker Compose
 

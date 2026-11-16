@@ -492,6 +492,7 @@ class Pipeline:
             self.settings.retry_attempts,
             self.settings.x_max_chars,
             auth_mode=self.settings.x_auth_mode,
+            post_api_version=self.settings.x_post_api_version,
             consumer_key=self.settings.x_api_key,
             consumer_secret=self.settings.x_api_secret,
             resource_owner_key=self.settings.x_access_token,

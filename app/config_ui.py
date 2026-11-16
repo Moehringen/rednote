@@ -35,6 +35,7 @@ PUBLIC_KEYS = (
     "X_TAGS",
     "X_API_BASE_URL",
     "X_AUTH_MODE",
+    "X_POST_API_VERSION",
     "X_MEDIA_UPLOAD_BASE_URL",
     "X_MEDIA_UPLOAD_PATH",
     "X_MAX_CHARS",
@@ -45,6 +46,7 @@ DEFAULTS = {
     "X_TAGS": "#Xiaohongshu #Fashion #StyleInspiration #OutfitIdeas #Photography",
     "X_API_BASE_URL": "https://api.x.com",
     "X_AUTH_MODE": "oauth2",
+    "X_POST_API_VERSION": "v2",
     "X_MEDIA_UPLOAD_BASE_URL": "https://upload.twitter.com",
     "X_MEDIA_UPLOAD_PATH": "/2/media/upload",
     "X_MAX_CHARS": "280",
@@ -225,6 +227,8 @@ def render_config_page(
     <label>标签<input name="X_TAGS" value="{value('X_TAGS')}" placeholder="#Xiaohongshu #Fashion #StyleInspiration #OutfitIdeas #Photography"></label>
     <label>X API Base URL<input name="X_API_BASE_URL" value="{value('X_API_BASE_URL')}"></label>
     <label>认证模式<select name="X_AUTH_MODE"><option value="oauth2"{' selected' if str(values.get('X_AUTH_MODE', 'oauth2')) == 'oauth2' else ''}>OAuth 2.0 User Token</option><option value="oauth1"{' selected' if str(values.get('X_AUTH_MODE', 'oauth2')) == 'oauth1' else ''}>OAuth 1.0a 旧 App</option><option value="auto"{' selected' if str(values.get('X_AUTH_MODE', 'oauth2')) == 'auto' else ''}>自动选择（完整 OAuth1 优先）</option></select></label>
+    <label>发帖接口<select name="X_POST_API_VERSION"><option value="v2"{' selected' if str(values.get('X_POST_API_VERSION', 'v2')) == 'v2' else ''}>当前 v2（需要项目权限）</option><option value="v1.1"{' selected' if str(values.get('X_POST_API_VERSION', 'v2')) == 'v1.1' else ''}>旧版 v1.1（OAuth1，已废弃）</option></select></label>
+    <p class="hint">免费旧 App 路线选择 <code>v1.1</code>。它使用 <code>/1.1/statuses/update.json</code>；X 可能随时限制或下线该接口。</p>
     <label>OAuth1 媒体上传 Base URL<input name="X_MEDIA_UPLOAD_BASE_URL" value="{value('X_MEDIA_UPLOAD_BASE_URL')}"></label>
     <label>媒体上传路径<input name="X_MEDIA_UPLOAD_PATH" value="{value('X_MEDIA_UPLOAD_PATH')}"></label>
     <label>单条推文最大字符数<input name="X_MAX_CHARS" value="{value('X_MAX_CHARS')}" inputmode="numeric"></label>

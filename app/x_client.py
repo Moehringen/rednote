@@ -33,6 +33,7 @@ class XClient:
         max_chars: int = 280,
         *,
         auth_mode: str = "oauth2",
+        post_api_version: str = "v2",
         consumer_key: str = "",
         consumer_secret: str = "",
         resource_owner_key: str = "",
@@ -42,6 +43,8 @@ class XClient:
     ) -> None:
         if auth_mode not in {"oauth1", "oauth2", "auto"}:
             raise XAPIError("X_AUTH_MODE must be oauth1, oauth2, or auto")
+        if post_api_version not in {"v2", "v1.1"}:
+            raise XAPIError("X_POST_API_VERSION must be v2 or v1.1")
         oauth1_ready = all(
             (consumer_key, consumer_secret, resource_owner_key, resource_owner_secret)
         )
@@ -53,8 +56,11 @@ class XClient:
             )
         if auth_mode == "oauth2" and not access_token:
             raise XAPIError("X_USER_ACCESS_TOKEN is missing")
+        if post_api_version == "v1.1" and auth_mode != "oauth1":
+            raise XAPIError("X_POST_API_VERSION=v1.1 requires X_AUTH_MODE=oauth1")
         self.base_url = base_url.rstrip("/")
         self.auth_mode = auth_mode
+        self.post_api_version = post_api_version
         self.access_token = access_token
         self.upload_path = upload_path
         self.timeout = timeout
@@ -390,6 +396,8 @@ class XClient:
     ) -> str:
         if len(text) > self.max_chars:
             raise XAPIError(f"post text exceeds X_MAX_CHARS={self.max_chars}")
+        if self.post_api_version == "v1.1":
+            return await self._create_post_v1_1(text, media_ids, reply_to)
         body: dict[str, Any] = {"text": text}
         if media_ids:
             body["media"] = {"media_ids": media_ids}
@@ -401,8 +409,26 @@ class XClient:
             raise XAPIError("X post response has no tweet id")
         return tweet_id
 
+    async def _create_post_v1_1(
+        self, text: str, media_ids: list[str], reply_to: str | None
+    ) -> str:
+        form: dict[str, object] = {"status": text}
+        if media_ids:
+            form["media_ids"] = ",".join(media_ids)
+        if reply_to:
+            form["in_reply_to_status_id"] = reply_to
+        payload = await self._oauth1_form_request(
+            "POST", f"{self.base_url}/1.1/statuses/update.json", form
+        )
+        tweet_id = str(payload.get("id_str") or payload.get("id") or "")
+        if not tweet_id:
+            raise XAPIError("legacy X post response has no status id")
+        return tweet_id
+
     async def verify_credentials(self) -> dict[str, Any]:
         """Perform a read-only user-context check without publishing anything."""
+        if self.post_api_version == "v1.1":
+            return await self._request("GET", "/1.1/account/verify_credentials.json")
         return await self._request("GET", "/2/users/me")
 
     async def publish_thread(

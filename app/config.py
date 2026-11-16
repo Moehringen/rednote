@@ -41,6 +41,7 @@ class Settings:
     repost_authorized: bool
     x_api_base_url: str
     x_auth_mode: str
+    x_post_api_version: str
     x_user_access_token: str
     x_api_key: str
     x_api_secret: str
@@ -89,6 +90,9 @@ class Settings:
         x_auth_mode = os.getenv("X_AUTH_MODE", "oauth2").strip().lower()
         if x_auth_mode not in {"oauth2", "oauth1", "auto"}:
             raise ValueError("X_AUTH_MODE must be oauth2, oauth1, or auto")
+        x_post_api_version = os.getenv("X_POST_API_VERSION", "v2").strip().lower()
+        if x_post_api_version not in {"v2", "v1.1"}:
+            raise ValueError("X_POST_API_VERSION must be v2 or v1.1")
         return cls(
             xhs_backend=xhs_backend,
             profile_url=os.getenv("XHS_PROFILE_URL", "https://xhslink.cn/o/Dfkx6Lhilv"),
@@ -108,6 +112,7 @@ class Settings:
             repost_authorized=_bool(os.getenv("REPOST_AUTHORIZED", "false")),
             x_api_base_url=os.getenv("X_API_BASE_URL", "https://api.x.com").rstrip("/"),
             x_auth_mode=x_auth_mode,
+            x_post_api_version=x_post_api_version,
             x_user_access_token=os.getenv("X_USER_ACCESS_TOKEN", ""),
             x_api_key=os.getenv("X_API_KEY", ""),
             x_api_secret=os.getenv("X_API_SECRET", ""),
