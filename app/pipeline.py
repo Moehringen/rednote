@@ -106,7 +106,11 @@ class Pipeline:
                 raise XhsCLIError("verified target profile returned no dated note candidates")
             latest_note = next(note for candidate, note in detailed if candidate.note_id == latest.note_id)
             return await self._fetch_process_report(
-                latest_note.source_url, output_dir, "test-profile-latest"
+                latest_note.source_url,
+                output_dir,
+                "test-profile-latest",
+                prefetched_note=latest_note,
+                prefetched_identity=identity,
             )
         except (XhsCLIError, OSError, ValueError) as exc:
             errors.append(str(exc))
@@ -115,7 +119,12 @@ class Pipeline:
             )
 
     async def _fetch_process_report(
-        self, source_url: str, output_dir: Path, operation: str
+        self,
+        source_url: str,
+        output_dir: Path,
+        operation: str,
+        prefetched_note: Note | None = None,
+        prefetched_identity: object | None = None,
     ) -> Path:
         errors: list[str] = []
         note: Note | None = None
@@ -123,12 +132,12 @@ class Pipeline:
         media_paths: list[Path] = []
         identity = None
         try:
-            identity = await self.xhs.resolve_profile_identity(
+            identity = prefetched_identity or await self.xhs.resolve_profile_identity(
                 self.settings.profile_url,
                 self.settings.expected_user_id,
                 self.settings.target_nickname,
             )
-            note = await self.xhs.note_from_url(source_url)
+            note = prefetched_note or await self.xhs.note_from_url(source_url)
             if note.author_user_id != identity.user_id:
                 errors.append(
                     "target author mismatch: note user_id did not match the verified profile user_id"

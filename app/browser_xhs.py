@@ -322,6 +322,11 @@ class BrowserXhsClient:
             profile_url=public_source_url(current_url),
             final_url=public_source_url(current_url),
         )
+        # After the first short-link resolution, keep using the verified
+        # canonical profile URL.  Re-opening the share short link for every
+        # candidate can leave the attached browser on its interstitial page
+        # and unnecessarily wait for the login timeout.
+        self.profile_url = self._identity.final_url
         return self._identity
 
     async def identity(self, user_id: str) -> ProfileIdentity:
