@@ -136,6 +136,8 @@ class XClient:
 
     @staticmethod
     def _payload(response: httpx.Response) -> dict[str, Any]:
+        if response.status_code == 204 or not response.content:
+            return {}
         payload = response.json()
         if not isinstance(payload, dict):
             raise XAPIError("X API returned a non-object response")

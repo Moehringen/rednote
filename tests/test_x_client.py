@@ -146,3 +146,8 @@ def test_http_error_message_keeps_safe_x_error_message() -> None:
         json={"errors": [{"code": 89, "message": "Invalid or expired token."}]},
     )
     assert XClient._http_error_message(response) == "HTTP 401: Invalid or expired token."
+
+
+def test_empty_legacy_append_response_is_successful() -> None:
+    assert XClient._payload(httpx.Response(204)) == {}
+    assert XClient._payload(httpx.Response(200, content=b"")) == {}
