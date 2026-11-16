@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+import os
 import re
+import shutil
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
+
+import httpx
 
 from .models import Note, ProfileCandidate, ProfileIdentity
 from .url_utils import public_source_url
@@ -127,8 +133,10 @@ class BrowserXhsClient:
         self.login_timeout = login_timeout
         self.timezone = timezone
         self._playwright = None
+        self._browser = None
         self._context = None
         self._page = None
+        self._browser_process: subprocess.Popen[bytes] | None = None
         self._identity: ProfileIdentity | None = None
 
     async def _start(self) -> None:
@@ -142,28 +150,84 @@ class BrowserXhsClient:
             ) from exc
         self.browser_profile_dir.mkdir(parents=True, exist_ok=True)
         self._playwright = await async_playwright().start()
-        kwargs = {
-            "headless": self.headless,
-            "viewport": {"width": 1440, "height": 1000},
-        }
+        executable = self._browser_executable()
+        port = 9222
+        command = [
+            str(executable),
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-breakpad",
+            "--disable-crash-reporter",
+            "--no-first-run",
+            "--no-default-browser-check",
+            f"--user-data-dir={self.browser_profile_dir}",
+            "--remote-debugging-address=127.0.0.1",
+            f"--remote-debugging-port={port}",
+            "--remote-allow-origins=*",
+            "--window-size=1440,1000",
+        ]
+        if self.headless:
+            command.append("--headless=new")
+        command.append("about:blank")
+        browser_env = os.environ.copy()
+        browser_env["CHROME_CRASHPAD_DISABLE"] = "1"
+        self._browser_process = subprocess.Popen(
+            command,
+            env=browser_env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        endpoint = f"http://127.0.0.1:{port}"
+        for _ in range(150):
+            if self._browser_process.poll() is not None:
+                raise XhsCLIError("browser process exited before its remote debugging endpoint became ready")
+            try:
+                async with httpx.AsyncClient(timeout=1) as client:
+                    response = await client.get(f"{endpoint}/json/version")
+                if response.is_success:
+                    break
+            except httpx.HTTPError:
+                pass
+            await asyncio.sleep(0.1)
+        else:
+            raise XhsCLIError("browser remote debugging endpoint did not become ready")
+        self._browser = await self._playwright.chromium.connect_over_cdp(endpoint)
+        self._context = self._browser.contexts[0] if self._browser.contexts else None
+        if self._context is None:
+            raise XhsCLIError("browser remote debugging returned no persistent context")
+        self._page = self._context.pages[0] if self._context.pages else await self._context.new_page()
+        self._page.set_default_timeout(15_000)
+
+    def _browser_executable(self) -> Path:
         if self.executable_path:
             executable = Path(self.executable_path).expanduser()
             if not executable.exists():
                 raise XhsCLIError(f"browser executable not found: {executable}")
-            kwargs["executable_path"] = str(executable)
-        self._context = await self._playwright.chromium.launch_persistent_context(
-            str(self.browser_profile_dir), **kwargs
-        )
-        self._page = self._context.pages[0] if self._context.pages else await self._context.new_page()
-        self._page.set_default_timeout(15_000)
+            return executable
+        for name in ("chromium", "chromium-browser", "google-chrome"):
+            executable = shutil.which(name)
+            if executable:
+                return Path(executable)
+        if self._playwright is None:
+            raise XhsCLIError("browser runtime is not initialized")
+        return Path(self._playwright.chromium.executable_path)
 
     async def close(self) -> None:
+        if self._browser is not None:
+            await self._browser.close()
         if self._context is not None:
-            await self._context.close()
+            self._context = None
         if self._playwright is not None:
             await self._playwright.stop()
+        if self._browser_process is not None and self._browser_process.poll() is None:
+            self._browser_process.terminate()
+            try:
+                await asyncio.to_thread(self._browser_process.wait, 5)
+            except subprocess.TimeoutExpired:
+                self._browser_process.kill()
+        self._browser_process = None
+        self._browser = None
         self._page = None
-        self._context = None
         self._playwright = None
 
     async def _navigate(self, url: str) -> None:
