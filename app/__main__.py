@@ -7,6 +7,7 @@ import shutil
 import sys
 
 from .config import Settings
+from .config_ui import serve_config_ui
 from .pipeline import Pipeline, collector_lock, run_daemon
 
 
@@ -35,11 +36,24 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         "--healthcheck", action="store_true", help="verify data directory and SQLite can be opened"
     )
+    result.add_argument(
+        "--config-ui",
+        action="store_true",
+        help="start the localhost-only X credential configuration page",
+    )
+    result.add_argument(
+        "--config-ui-port",
+        type=int,
+        default=8787,
+        help="localhost config page port (default: 8787)",
+    )
     result.add_argument("--note-url", help="override XHS_NOTE_URL for --test-latest")
     return result
 
 
 async def main_async(args: argparse.Namespace) -> int:
+    if args.config_ui:
+        return serve_config_ui("127.0.0.1", args.config_ui_port, ".env")
     settings = Settings.from_env()
     settings.ensure_directories()
     if args.healthcheck:

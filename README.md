@@ -42,6 +42,10 @@ cp .env.example .env
 # 检查目录和 SQLite
 python -m app --healthcheck
 
+# 启动仅监听本机的 X 凭证配置页面
+python -m app --config-ui
+# 浏览器打开 http://127.0.0.1:8787/
+
 # 单篇端到端草稿测试。不会发布到 X。
 python -m app --test-latest --note-url 'https://xhslink.cn/o/46BbiPl8OPJ'
 
@@ -56,6 +60,8 @@ go install github.com/tamnd/xiaohongshu-cli/cmd/xhs@v0.2.0
 ```
 
 v0.2.0 的 Go module 要求 Go 1.26；没有 Go 环境时可直接使用 Docker Compose，它会在构建阶段安装固定版本。
+
+配置页面只绑定 127.0.0.1，保存目标是当前目录的 .env，写入使用原子替换并设置为 600 权限。页面不会回显已经保存的 secret，也不会记录 POST 内容。当前发布客户端需要的是 X Developer 页面中为目标账号生成的 OAuth 2.0 User Access Token；App-only Bearer Token 不能代表账号发帖。首次配置建议保持 MODE=draft，确认译文、标签和转载授权后再单独打开发布门禁。
 
 主页长期轮询可能需要 Cookie。不要把 Cookie 写进 Git 或命令历史；可将浏览器导出的 Cookie 文件（请求头格式或 Netscape 格式）放在 `.env` 指定的 `XHS_COOKIE_FILE` 路径。xhs CLI 的 profile 页面会受到限流，配置了登录 Cookie 后再运行：
 
