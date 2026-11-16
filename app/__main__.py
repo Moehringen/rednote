@@ -7,7 +7,7 @@ import shutil
 import sys
 
 from .config import Settings
-from .pipeline import Pipeline, run_daemon
+from .pipeline import Pipeline, collector_lock, run_daemon
 
 
 def parser() -> argparse.ArgumentParser:
@@ -53,11 +53,13 @@ async def main_async(args: argparse.Namespace) -> int:
     pipeline = Pipeline(settings)
     try:
         if args.test_latest:
-            report = await pipeline.test_latest(args.note_url)
+            with collector_lock(settings.data_dir / ".collector.lock"):
+                report = await pipeline.test_latest(args.note_url)
             print(report)
             return 0
         if args.test_profile_latest:
-            report = await pipeline.test_profile_latest()
+            with collector_lock(settings.data_dir / ".collector.lock"):
+                report = await pipeline.test_profile_latest()
             print(report)
             return 0
         if args.daemon:

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import json
 import logging
+import shutil
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -19,6 +22,18 @@ from .x_client import XAPIError, XClient
 from .xhs_cli import XhsCLIClient, XhsCLIError
 
 LOGGER = logging.getLogger(__name__)
+
+
+@contextmanager
+def collector_lock(path: Path):
+    """Serialize browser-backed jobs that share the persistent Chromium page."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -69,13 +84,13 @@ class Pipeline:
     async def test_latest(self, source_url: str | None = None) -> Path:
         source_url = source_url or self.settings.note_url
         output_dir = self.settings.data_dir / "test_latest"
-        output_dir.mkdir(parents=True, exist_ok=True)
+        self._reset_test_output(output_dir)
         return await self._fetch_process_report(source_url, output_dir, "test-latest")
 
     async def test_profile_latest(self) -> Path:
         """Process the newest verified profile note, including baseline notes."""
         output_dir = self.settings.data_dir / "test_latest"
-        output_dir.mkdir(parents=True, exist_ok=True)
+        self._reset_test_output(output_dir)
         errors: list[str] = []
         identity = None
         try:
@@ -211,6 +226,16 @@ class Pipeline:
         return self._write_report(
             output_dir, note, errors, media_paths, translation, operation, identity
         )
+
+    @staticmethod
+    def _reset_test_output(output_dir: Path) -> None:
+        """Remove only generated single-note test artifacts before a new run."""
+        output_dir.mkdir(parents=True, exist_ok=True)
+        for child in output_dir.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
 
     async def run_once(self) -> Path:
         report_dir = self.settings.data_dir / "daily"
@@ -488,8 +513,10 @@ class Pipeline:
 
 async def run_daemon(pipeline: Pipeline) -> None:
     zone = ZoneInfo(pipeline.settings.timezone)
+    lock_path = pipeline.settings.data_dir / ".collector.lock"
     while True:
-        await pipeline.run_once()
+        with collector_lock(lock_path):
+            await pipeline.run_once()
         now = datetime.now(zone)
         next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
         if next_run <= now:
