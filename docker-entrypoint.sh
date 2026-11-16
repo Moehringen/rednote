@@ -2,6 +2,15 @@
 set -eu
 
 if [ "${REMOTE_DESKTOP:-false}" = "true" ]; then
+    # Chromium's crashpad and NSS databases must have writable XDG paths on
+    # the read-only root filesystem.  Without these, Debian ARM64 Chromium
+    # exits with a misleading SIGTRAP before its CDP endpoint is ready.
+    mkdir -p /tmp/.config /tmp/.cache /tmp/.local/share /tmp/runtime
+    chmod 700 /tmp/runtime
+    export XDG_CONFIG_HOME=/tmp/.config
+    export XDG_CACHE_HOME=/tmp/.cache
+    export XDG_DATA_HOME=/tmp/.local/share
+    export XDG_RUNTIME_DIR=/tmp/runtime
     # This directory is created as root in the image.  Xorg requires it to
     # remain root-owned even though the display server runs as app.
     if [ ! -d /tmp/.X11-unix ]; then
@@ -21,7 +30,7 @@ if [ "${REMOTE_DESKTOP:-false}" = "true" ]; then
         exit 1
     fi
     fluxbox -display :99 >/tmp/fluxbox.log 2>&1 &
-    x11vnc -display :99 -localhost -forever -shared -nopw -rfbport 5900 >/tmp/x11vnc.log 2>&1 &
+    x11vnc -display :99 -localhost -forever -shared -nopw -noxdamage -threads -rfbport 5900 >/tmp/x11vnc.log 2>&1 &
     websockify --web=/usr/share/novnc 0.0.0.0:6080 127.0.0.1:5900 >/tmp/novnc.log 2>&1 &
     export DISPLAY=:99
     export CHROME_CRASHPAD_DISABLE=1
