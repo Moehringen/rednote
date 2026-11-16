@@ -10,7 +10,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 TZ=Asia/Singapore \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates fluxbox novnc websockify x11vnc xauth xvfb \
+    && apt-get install -y --no-install-recommends ca-certificates chromium fluxbox novnc websockify x11vnc xauth xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt requirements-browser.txt ./

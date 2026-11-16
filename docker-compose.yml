@@ -27,7 +27,7 @@ services:
       XHS_COOKIE_FILE: /app/data/cookies/xhs.cookie
       XHS_BACKEND: "${XHS_BACKEND:-cli}"
       BROWSER_PROFILE_DIR: /app/data/browser-profile
-      BROWSER_EXECUTABLE_PATH: ""
+      BROWSER_EXECUTABLE_PATH: "${BROWSER_EXECUTABLE_PATH:-/usr/bin/chromium}"
       BROWSER_HEADLESS: "${BROWSER_HEADLESS:-false}"
       BROWSER_LOGIN_TIMEOUT_SECONDS: "${BROWSER_LOGIN_TIMEOUT_SECONDS:-180}"
       REMOTE_DESKTOP: "${REMOTE_DESKTOP:-false}"
