@@ -220,10 +220,13 @@ class Pipeline:
             self.store.upsert_discovered(note.note_id, note.source_url)
             row = self.store.get(note.note_id)
             if row and row["status"] in {"published", "publishing", "publish_unknown"}:
-                raise XhsCLIError(
-                    f"note {note.note_id} already has publication state {row['status']}; "
-                    "refusing duplicate post"
-                )
+                tweet_ids, media_ids = self.store.get_publish_state(note.note_id)
+                has_saved_media = any(media_ids.values())
+                if row["status"] != "publish_unknown" or tweet_ids or has_saved_media:
+                    raise XhsCLIError(
+                        f"note {note.note_id} already has publication state {row['status']}; "
+                        "refusing duplicate post"
+                    )
             return await self._process_note(
                 note, report_dir, "publish-note-url", identity, []
             )

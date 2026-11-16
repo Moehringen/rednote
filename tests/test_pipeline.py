@@ -78,6 +78,16 @@ def test_publish_note_url_is_author_verified_and_deduplicated(tmp_path: Path, mo
         pipeline.store.set_status(note.note_id, "published", tweet_ids=["tweet-1"])
 
     monkeypatch.setattr(pipeline, "_publish", fake_publish)
+    pipeline.store.upsert_discovered(
+        "000000000000000000000010", "https://xhslink.cn/o/test"
+    )
+    pipeline.store.set_status(
+        "000000000000000000000010",
+        "publish_unknown",
+        error_reason="auth failed before any media or tweet ID was saved",
+        tweet_ids=[],
+        media_ids={},
+    )
     first = asyncio.run(pipeline.publish_note_url("https://xhslink.cn/o/test"))
     second = asyncio.run(pipeline.publish_note_url("https://xhslink.cn/o/test"))
 
