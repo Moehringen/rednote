@@ -11,7 +11,7 @@ if [ ! -f "$ENV_FILE" ]; then
   echo "missing $ENV_FILE" >&2
   exit 1
 fi
-if [ ! -s "$AUTH_FILE" ]; then
+if ! sudo test -s "$AUTH_FILE"; then
   echo "missing $AUTH_FILE; transfer the xurl auth store first" >&2
   exit 1
 fi
