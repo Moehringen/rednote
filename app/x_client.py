@@ -4,6 +4,8 @@ import asyncio
 import base64
 import json
 import logging
+import os
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -34,6 +36,9 @@ class XClient:
         *,
         auth_mode: str = "oauth2",
         post_api_version: str = "v2",
+        token_source: str = "env",
+        xurl_app: str = "",
+        xurl_path: str = "xurl",
         consumer_key: str = "",
         consumer_secret: str = "",
         resource_owner_key: str = "",
@@ -45,6 +50,10 @@ class XClient:
             raise XAPIError("X_AUTH_MODE must be oauth1, oauth2, or auto")
         if post_api_version not in {"v2", "v1.1"}:
             raise XAPIError("X_POST_API_VERSION must be v2 or v1.1")
+        if token_source not in {"env", "xurl"}:
+            raise XAPIError("X_TOKEN_SOURCE must be env or xurl")
+        if token_source == "xurl" and not xurl_app:
+            raise XAPIError("XURL_APP is required when X_TOKEN_SOURCE=xurl")
         oauth1_ready = all(
             (consumer_key, consumer_secret, resource_owner_key, resource_owner_secret)
         )
@@ -54,7 +63,7 @@ class XClient:
             raise XAPIError(
                 "OAuth1 credentials are incomplete; need consumer and access token four-tuple"
             )
-        if auth_mode == "oauth2" and not access_token:
+        if auth_mode == "oauth2" and token_source == "env" and not access_token:
             raise XAPIError("X_USER_ACCESS_TOKEN is missing")
         if post_api_version == "v1.1" and auth_mode != "oauth1":
             raise XAPIError("X_POST_API_VERSION=v1.1 requires X_AUTH_MODE=oauth1")
@@ -62,6 +71,9 @@ class XClient:
         self.auth_mode = auth_mode
         self.post_api_version = post_api_version
         self.access_token = access_token
+        self.token_source = token_source
+        self.xurl_app = xurl_app
+        self.xurl_path = xurl_path
         self.upload_path = upload_path
         self.timeout = timeout
         self.attempts = max(1, attempts)
@@ -82,11 +94,12 @@ class XClient:
         last_error: Exception | None = None
         for attempt in range(1, self.attempts + 1):
             try:
+                access_token = await self._current_access_token()
                 async with httpx.AsyncClient(timeout=self.timeout) as client:
                     response = await client.request(
                         method,
                         f"{self.base_url}{path}",
-                        headers={"Authorization": f"Bearer {self.access_token}"},
+                        headers={"Authorization": f"Bearer {access_token}"},
                         **kwargs,
                     )
                 response.raise_for_status()
@@ -100,6 +113,28 @@ class XClient:
                 if attempt < self.attempts:
                     await asyncio.sleep(min(2**attempt, 8))
         raise XAPIError(f"X API request failed: {last_error or 'unknown error'}")
+
+    async def _current_access_token(self) -> str:
+        if self.token_source == "env":
+            return self.access_token
+        executable = shutil.which(self.xurl_path) or self.xurl_path
+        process = await asyncio.create_subprocess_exec(
+            executable,
+            "token",
+            "--app",
+            self.xurl_app,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=os.environ.copy(),
+        )
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=20)
+        token = stdout.decode("utf-8", "replace").strip()
+        if process.returncode != 0 or not token:
+            detail = stderr.decode("utf-8", "replace").strip()
+            raise XAPIError(f"xurl token lookup failed{': ' + detail[:240] if detail else ''}")
+        if any(char.isspace() for char in token) or token.lower().startswith("bearer "):
+            raise XAPIError("xurl returned an invalid access token format")
+        return token
 
     async def _request_oauth1(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         """Call a JSON X API endpoint with OAuth 1.0a user-context signing."""

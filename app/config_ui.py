@@ -39,6 +39,8 @@ PUBLIC_KEYS = (
     "X_API_BASE_URL",
     "X_AUTH_MODE",
     "X_POST_API_VERSION",
+    "X_TOKEN_SOURCE",
+    "XURL_APP",
     "X_MEDIA_UPLOAD_BASE_URL",
     "X_MEDIA_UPLOAD_PATH",
     "X_MAX_CHARS",
@@ -63,6 +65,8 @@ DEFAULTS = {
     "X_API_BASE_URL": "https://api.x.com",
     "X_AUTH_MODE": "oauth2",
     "X_POST_API_VERSION": "v2",
+    "X_TOKEN_SOURCE": "env",
+    "XURL_APP": "",
     "X_MEDIA_UPLOAD_BASE_URL": "https://upload.x.com",
     "X_MEDIA_UPLOAD_PATH": "/2/media/upload",
     "X_MAX_CHARS": "280",
@@ -267,6 +271,9 @@ def render_config_page(
     <p class="hint">每篇会从标签池中按笔记 ID 稳定随机抽取；同一篇重试时标签不变。系统会自动排除 <code>#Xiaohongshu</code>、<code>#Rednote</code> 等来源平台标签。来源链接仍保存在元数据和报告中，但不会写入推文正文。</p>
     <label>X API Base URL<input name="X_API_BASE_URL" value="{value('X_API_BASE_URL')}"></label>
     <label>认证模式<select name="X_AUTH_MODE"><option value="oauth2"{' selected' if str(values.get('X_AUTH_MODE', 'oauth2')) == 'oauth2' else ''}>V2 OAuth 2.0 User Token</option><option value="oauth1"{' selected' if str(values.get('X_AUTH_MODE', 'oauth2')) == 'oauth1' else ''}>V1 OAuth 1.0a 旧 App</option><option value="auto"{' selected' if str(values.get('X_AUTH_MODE', 'oauth2')) == 'auto' else ''}>自动选择（完整 V1 OAuth1 优先）</option></select></label>
+    <label>OAuth2 token 来源<select name="X_TOKEN_SOURCE"><option value="env"{' selected' if str(values.get('X_TOKEN_SOURCE', 'env')) == 'env' else ''}>.env 静态 User Access Token</option><option value="xurl"{' selected' if str(values.get('X_TOKEN_SOURCE', 'env')) == 'xurl' else ''}>xurl 自动刷新</option></select></label>
+    <label>xurl App 名称<input name="XURL_APP" value="{value('XURL_APP')}" placeholder="例如 girlinrednote"></label>
+    <p class="hint">选择 xurl 后，程序调用本机 <code>xurl token --app</code> 获取并自动刷新用户 token；不会在页面回显 token。</p>
     <label>发帖接口<select name="X_POST_API_VERSION"><option value="v2"{' selected' if str(values.get('X_POST_API_VERSION', 'v2')) == 'v2' else ''}>V2 当前接口（推荐）</option><option value="v1.1"{' selected' if str(values.get('X_POST_API_VERSION', 'v2')) == 'v1.1' else ''}>V1.1 旧接口（OAuth1，已废弃）</option></select></label>
     <p class="hint">V2 发帖使用 <code>POST /2/tweets</code>；V1.1 仅用于兼容旧 App。OAuth1 媒体接口不使用已废弃的 <code>update_with_media</code>。</p>
     <label>OAuth1 媒体上传 Base URL<input name="X_MEDIA_UPLOAD_BASE_URL" value="{value('X_MEDIA_UPLOAD_BASE_URL')}"></label>

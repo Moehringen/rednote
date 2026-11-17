@@ -38,6 +38,31 @@ def test_video_upload_uses_chunked_v2_flow(tmp_path: Path) -> None:
     }
 
 
+def test_xurl_token_source_reads_token_without_logging_it(monkeypatch) -> None:
+    class FakeProcess:
+        returncode = 0
+
+        async def communicate(self):
+            return b"fresh-user-token\n", b""
+
+    async def fake_create_process(*args, **kwargs):
+        assert args[0].endswith("/xurl") or args[0] == "xurl"
+        assert args[1:] == ("token", "--app", "girlinrednote")
+        assert kwargs["stdout"] is asyncio.subprocess.PIPE
+        assert kwargs["stderr"] is asyncio.subprocess.PIPE
+        return FakeProcess()
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_process)
+    client = XClient(
+        "https://api.x.com",
+        auth_mode="oauth2",
+        token_source="xurl",
+        xurl_app="girlinrednote",
+    )
+
+    assert asyncio.run(client._current_access_token()) == "fresh-user-token"
+
+
 def test_oauth1_signing_uses_user_context_without_secret_in_header() -> None:
     client = XClient(
         "https://api.x.com",

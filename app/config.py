@@ -64,6 +64,9 @@ class Settings:
     x_auth_mode: str
     x_post_api_version: str
     x_user_access_token: str
+    x_token_source: str
+    xurl_app: str
+    xurl_path: str
     x_bearer_token: str
     x_api_key: str
     x_api_secret: str
@@ -116,6 +119,9 @@ class Settings:
         x_post_api_version = os.getenv("X_POST_API_VERSION", "v2").strip().lower()
         if x_post_api_version not in {"v2", "v1.1"}:
             raise ValueError("X_POST_API_VERSION must be v2 or v1.1")
+        x_token_source = os.getenv("X_TOKEN_SOURCE", "env").strip().lower()
+        if x_token_source not in {"env", "xurl"}:
+            raise ValueError("X_TOKEN_SOURCE must be env or xurl")
         configured_tag_value = os.getenv("X_TAG_POOL", os.getenv("X_TAGS", DEFAULT_TAG_POOL))
         configured_tags = _tags(configured_tag_value)
         # A stale deployment may still contain the old, deliberately blocked
@@ -144,6 +150,9 @@ class Settings:
             x_auth_mode=x_auth_mode,
             x_post_api_version=x_post_api_version,
             x_user_access_token=os.getenv("X_USER_ACCESS_TOKEN", ""),
+            x_token_source=x_token_source,
+            xurl_app=os.getenv("XURL_APP", "").strip(),
+            xurl_path=os.getenv("XURL_PATH", "xurl").strip() or "xurl",
             x_bearer_token=os.getenv("X_BEARER_TOKEN", ""),
             x_api_key=os.getenv("X_API_KEY", ""),
             x_api_secret=os.getenv("X_API_SECRET", ""),
@@ -213,6 +222,11 @@ class Settings:
             )
         if self.x_auth_mode == "auto" and oauth1_ready:
             return True, "publish gates passed (oauth1 auto-selected)"
+        if self.x_token_source == "xurl":
+            return (True, "publish gates passed (xurl OAuth2 user context)") if self.xurl_app else (
+                False,
+                "XURL_APP is missing; set X_TOKEN_SOURCE=env or configure an xurl app",
+            )
         if not self.x_user_access_token:
             return False, "X_USER_ACCESS_TOKEN is missing"
         return True, "publish gates passed (oauth2)"

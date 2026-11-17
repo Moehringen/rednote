@@ -67,6 +67,8 @@ v0.2.0 的 Go module 要求 Go 1.26；没有 Go 环境时可直接使用 Docker 
 - `X_AUTH_MODE=oauth1`：使用旧 App 的 `X_API_KEY`、`X_API_SECRET`、`X_ACCESS_TOKEN`、`X_ACCESS_TOKEN_SECRET`。OAuth1 媒体走 `upload.x.com/1.1/media/upload.json` 的用户上下文分段上传。
 - `X_POST_API_VERSION=v2`（默认）：发帖走当前 `POST /2/tweets`，需要当前 Project 权限。
 - `X_POST_API_VERSION=v1.1`：免费旧 App 兼容路径，发帖走 `POST /1.1/statuses/update.json`，仅允许和 OAuth1 一起使用。该接口属于旧版接口，可能被 X 限制或下线；系统仍不使用已废弃的 `update_with_media`。
+- `X_TOKEN_SOURCE=env`（默认）：从 `.env` 读取 `X_USER_ACCESS_TOKEN`。
+- `X_TOKEN_SOURCE=xurl`：调用本机 xurl 的 token store 获取用户 token，并由 xurl 自动刷新。此模式需要 `XURL_APP`，例如 `XURL_APP=girlinrednote`；xurl 必须已经完成 OAuth2 登录。项目不会读取或复制 xurl 的凭证库。
 
 配置页按版本分区保存凭证：
 
@@ -78,6 +80,15 @@ v0.2.0 的 Go module 要求 Go 1.26；没有 Go 环境时可直接使用 Docker 
 ```sh
 python -m app --check-x-auth
 ```
+
+如果使用 xurl 自动刷新，先完成一次授权并检查账号：
+
+```sh
+xurl auth oauth2 --app girlinrednote
+xurl --app girlinrednote /2/users/me
+```
+
+然后在 `.env` 中设置 `X_AUTH_MODE=oauth2`、`X_TOKEN_SOURCE=xurl`、`XURL_APP=girlinrednote`。程序每次调用 X API 前执行 `xurl token --app girlinrednote`，因此不需要把短期 Access Token 或 Refresh Token 复制到项目配置中。
 
 首次配置建议保持 `MODE=draft`，确认译文、标签和转载授权后再单独打开发布门禁。
 
