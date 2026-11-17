@@ -1,5 +1,6 @@
 .env
 xkey.txt
+xurl/
 .venv/
 .local/
 __pycache__/

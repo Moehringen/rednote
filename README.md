@@ -90,6 +90,8 @@ xurl --app girlinrednote /2/users/me
 
 然后在 `.env` 中设置 `X_AUTH_MODE=oauth2`、`X_TOKEN_SOURCE=xurl`、`XURL_APP=girlinrednote`。程序每次调用 X API 前执行 `xurl token --app girlinrednote`，因此不需要把短期 Access Token 或 Refresh Token 复制到项目配置中。
 
+生产容器会把 `/opt/rednote_to_x/xurl/auth.yml` 挂载到容器内的 `/home/app/.xurl/auth.yml`，并在镜像中安装 xurl。该文件只应保留生产所需的 App（例如 `girlinrednote`），权限设为 `600`、目录属主为容器用户 `10001:10001`；xurl 刷新 token 后会回写该文件。不要把它提交到 Git，也不要把它放进 `.env`。
+
 首次配置建议保持 `MODE=draft`，确认译文、标签和转载授权后再单独打开发布门禁。
 
 主页长期轮询可能需要 Cookie。不要把 Cookie 写进 Git 或命令历史；可将浏览器导出的 Cookie 文件（请求头格式或 Netscape 格式）放在 `.env` 指定的 `XHS_COOKIE_FILE` 路径。xhs CLI 的 profile 页面会受到限流，配置了登录 Cookie 后再运行：

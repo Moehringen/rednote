@@ -25,6 +25,7 @@ services:
       XHS_CONFIG_DIR: /app/data/xhs-config
       XHS_CACHE_DIR: /app/data/xhs-cache
       XHS_COOKIE_FILE: /app/data/cookies/xhs.cookie
+      XURL_PATH: "${XURL_PATH:-/usr/local/bin/xurl}"
       XHS_BACKEND: "${XHS_BACKEND:-cli}"
       BROWSER_PROFILE_DIR: /app/data/browser-profile
       BROWSER_EXECUTABLE_PATH: "${BROWSER_EXECUTABLE_PATH:-/usr/bin/chromium}"
@@ -33,6 +34,7 @@ services:
       REMOTE_DESKTOP: "${REMOTE_DESKTOP:-false}"
     volumes:
       - ${HOST_DATA_DIR:-./data}:/app/data
+      - ${XURL_AUTH_DIR:-./xurl}:/home/app/.xurl
     ports:
       - "127.0.0.1:6080:6080"
     shm_size: "1gb"

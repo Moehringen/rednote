@@ -2,6 +2,7 @@ FROM golang:1.26-bookworm AS xhs-builder
 
 ARG XHS_VERSION=v0.2.0
 RUN GOBIN=/out go install github.com/tamnd/xiaohongshu-cli/cmd/xhs@${XHS_VERSION}
+RUN GOBIN=/out go install github.com/xdevplatform/xurl@v1.3.4
 
 FROM python:3.12-slim
 
@@ -19,6 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt -r requirements-browser.txt \
     && python -m playwright install --with-deps chromium \
     && chmod -R a+rX /ms-playwright
 COPY --from=xhs-builder /out/xhs /usr/local/bin/xhs
+COPY --from=xhs-builder /out/xurl /usr/local/bin/xurl
 COPY --chown=10001:10001 app ./app
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod 755 /usr/local/bin/docker-entrypoint.sh

@@ -9,6 +9,7 @@ REPOSITORY_URL="${DEPLOY_REPOSITORY_URL:-https://github.com/Moehringen/rednote.g
 DEPLOY_SHA="${1:?deployment commit SHA is required}"
 
 sudo install -d -m 755 "$BASE_DIR" "$BASE_DIR/data"
+sudo install -d -m 700 "$BASE_DIR/xurl"
 if [ ! -f "$BASE_DIR/.env" ]; then
   echo "missing $BASE_DIR/.env; create it before enabling automatic deployment" >&2
   exit 1
@@ -31,9 +32,12 @@ echo "deployed_source_sha=$(sudo git -C "$SOURCE_DIR" rev-parse HEAD)"
 # downloaded media, SQLite database, and optional CLI cache.
 sudo chown -R 10001:10001 "$BASE_DIR/data"
 sudo chmod 700 "$BASE_DIR/data"
+sudo chown -R 10001:10001 "$BASE_DIR/xurl"
+sudo chmod 700 "$BASE_DIR/xurl"
 
 sudo env \
   HOST_DATA_DIR="$BASE_DIR/data" \
+  XURL_AUTH_DIR="$BASE_DIR/xurl" \
   DEPLOY_ENV_FILE="$BASE_DIR/.env" \
   XHS_BACKEND="${XHS_BACKEND:-browser}" \
   BROWSER_HEADLESS="${BROWSER_HEADLESS:-false}" \
@@ -46,6 +50,7 @@ sudo env \
 
 sudo env \
   HOST_DATA_DIR="$BASE_DIR/data" \
+  XURL_AUTH_DIR="$BASE_DIR/xurl" \
   DEPLOY_ENV_FILE="$BASE_DIR/.env" \
   XHS_BACKEND="${XHS_BACKEND:-browser}" \
   BROWSER_HEADLESS="${BROWSER_HEADLESS:-false}" \
