@@ -22,6 +22,7 @@ services:
       TZ: Asia/Singapore
       DATA_DIR: /app/data
       DB_PATH: /app/data/rednote_to_x.sqlite3
+      ACCOUNTS_CONFIG: /app/data/accounts.toml
       XHS_CONFIG_DIR: /app/data/xhs-config
       XHS_CACHE_DIR: /app/data/xhs-cache
       XHS_COOKIE_FILE: /app/data/cookies/xhs.cookie

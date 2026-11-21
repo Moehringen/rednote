@@ -1,0 +1,35 @@
+# Non-secret routing configuration. Copy to accounts.toml and edit locally.
+# Do not put access tokens, refresh tokens, Cookie values, or API secrets here.
+
+[accounts.woodpecker]
+enabled = true
+# Keep the existing single-account data and SQLite history during migration.
+data_subdir = "."
+xhs_profile_url = "https://xhslink.cn/o/Dfkx6Lhilv"
+xhs_note_url = "https://xhslink.cn/o/46BbiPl8OPJ"
+xhs_nickname = "琢磨鸟"
+xhs_english_name = "thewoodpecker"
+xhs_expected_user_id = "67d21d20000000000e01d41e"
+xurl_app = "girlinrednote"
+x_username = "hugmygirl"
+x_expected_user_id = "2184651995"
+mode = "draft"
+repost_authorized = false
+
+[accounts.account2]
+enabled = false
+data_subdir = "accounts/account2"
+# Fill these in after verifying the second Xiaohongshu profile identity.
+xhs_profile_url = ""
+xhs_note_url = ""
+xhs_nickname = ""
+xhs_english_name = ""
+xhs_expected_user_id = ""
+# Complete `xurl auth oauth2 --app <name>` before enabling this route.
+xurl_app = ""
+x_username = ""
+x_expected_user_id = ""
+mode = "draft"
+repost_authorized = false
+x_tag_count = 4
+x_max_chars = 280

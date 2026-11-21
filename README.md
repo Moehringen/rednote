@@ -45,6 +45,7 @@ python -m app --healthcheck
 # 启动仅监听本机的 X 凭证配置页面
 python -m app --config-ui
 # 浏览器打开 http://127.0.0.1:8787/
+# 多账号路线管理页：http://127.0.0.1:8787/accounts
 
 # 单篇端到端草稿测试。不会发布到 X。
 python -m app --test-latest --note-url 'https://xhslink.cn/o/46BbiPl8OPJ'
@@ -89,6 +90,22 @@ xurl --app girlinrednote /2/users/me
 ```
 
 然后在 `.env` 中设置 `X_AUTH_MODE=oauth2`、`X_TOKEN_SOURCE=xurl`、`XURL_APP=girlinrednote`。程序每次调用 X API 前执行 `xurl token --app girlinrednote`，因此不需要把短期 Access Token 或 Refresh Token 复制到项目配置中。
+
+## 多账号路由
+
+复制 `accounts.toml.example` 为本地 `accounts.toml`，每个 `[accounts.<account_id>]` 定义一条独立的“小红书 → X”路线。账号 ID 只能使用字母、数字、`_` 和 `-`；启用多个账号时，每个账号必须使用不同的 `xurl_app`，不能共享 `.env` 中的静态 User Access Token。
+
+```sh
+cp accounts.toml.example accounts.toml
+python -m app --list-accounts
+python -m app --check-x-auth --account woodpecker
+python -m app --test-profile-latest --account account2
+python -m app --publish-note-url 'https://xhslink.cn/o/...' --account account2
+```
+
+每个账号会隔离保存自己的浏览器 Profile、Cookie、xhs 缓存、媒体报告和 SQLite 状态。`data_subdir="."` 可让现有单账号继续使用原来的 `data/` 和数据库；新账号应使用独立子目录，例如 `accounts/account2`。多账号 daemon 会按账号顺序执行，每天 09:00 Asia/Singapore 运行一次。
+
+生产容器从 `/app/data/accounts.toml` 读取多账号配置；宿主机对应 `/opt/rednote_to_x/data/accounts.toml`。xurl 的一个 `auth.yml` 可以保存多个 App，但必须保持文件权限 `600`，且不能提交 Git。发布前程序会调用 `/2/users/me`，校验当前 xurl 凭证的 X 用户 ID/用户名与该账号配置一致，防止账号串发。
 
 生产容器会把 `/opt/rednote_to_x/xurl/auth.yml` 挂载到容器内的 `/home/app/.xurl/auth.yml`，并在镜像中安装 xurl。该文件只应保留生产所需的 App（例如 `girlinrednote`），权限设为 `600`、目录属主为容器用户 `10001:10001`；xurl 刷新 token 后会回写该文件。不要把它提交到 Git，也不要把它放进 `.env`。
 

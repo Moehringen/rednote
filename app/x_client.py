@@ -468,6 +468,27 @@ class XClient:
             return await self._request("GET", "/1.1/account/verify_credentials.json")
         return await self._request("GET", "/2/users/me")
 
+    @staticmethod
+    def validate_identity(
+        payload: dict[str, Any], expected_user_id: str = "", expected_username: str = ""
+    ) -> tuple[str, str]:
+        """Fail closed if a route's credentials resolve to the wrong X account."""
+        account = payload.get("data") or payload
+        if not isinstance(account, dict):
+            raise XAPIError("X identity response has no account object")
+        user_id = str(account.get("id") or account.get("id_str") or "")
+        username = str(account.get("username") or account.get("screen_name") or "")
+        if expected_user_id and user_id != expected_user_id:
+            raise XAPIError(
+                f"X identity mismatch; expected user_id {expected_user_id}, got {user_id or 'missing'}"
+            )
+        normalized_expected = expected_username.lstrip("@").casefold()
+        if normalized_expected and username.casefold() != normalized_expected:
+            raise XAPIError(
+                f"X identity mismatch; expected username @{normalized_expected}, got @{username or 'missing'}"
+            )
+        return user_id, username
+
     async def publish_thread(
         self,
         posts: list[DraftPost],

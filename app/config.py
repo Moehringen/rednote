@@ -46,6 +46,8 @@ DEFAULT_TAG_POOL = (
 
 @dataclass(frozen=True, slots=True)
 class Settings:
+    account_id: str
+    accounts_config: Path
     xhs_backend: str
     profile_url: str
     note_url: str
@@ -67,6 +69,8 @@ class Settings:
     x_token_source: str
     xurl_app: str
     xurl_path: str
+    x_username: str
+    x_expected_user_id: str
     x_bearer_token: str
     x_api_key: str
     x_api_secret: str
@@ -130,6 +134,8 @@ class Settings:
         if configured_tag_value.strip() and not configured_tags:
             configured_tags = _tags(DEFAULT_TAG_POOL)
         return cls(
+            account_id="default",
+            accounts_config=Path(os.getenv("ACCOUNTS_CONFIG", "./accounts.toml")),
             xhs_backend=xhs_backend,
             profile_url=os.getenv("XHS_PROFILE_URL", "https://xhslink.cn/o/Dfkx6Lhilv"),
             note_url=os.getenv("XHS_NOTE_URL", "https://xhslink.cn/o/46BbiPl8OPJ"),
@@ -153,6 +159,8 @@ class Settings:
             x_token_source=x_token_source,
             xurl_app=os.getenv("XURL_APP", "").strip(),
             xurl_path=os.getenv("XURL_PATH", "xurl").strip() or "xurl",
+            x_username=os.getenv("X_USERNAME", "").strip().lstrip("@"),
+            x_expected_user_id=os.getenv("X_EXPECTED_USER_ID", "").strip(),
             x_bearer_token=os.getenv("X_BEARER_TOKEN", ""),
             x_api_key=os.getenv("X_API_KEY", ""),
             x_api_secret=os.getenv("X_API_SECRET", ""),

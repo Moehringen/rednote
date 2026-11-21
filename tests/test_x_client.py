@@ -176,3 +176,18 @@ def test_http_error_message_keeps_safe_x_error_message() -> None:
 def test_empty_legacy_append_response_is_successful() -> None:
     assert XClient._payload(httpx.Response(204)) == {}
     assert XClient._payload(httpx.Response(200, content=b"")) == {}
+
+
+def test_validate_identity_rejects_cross_account_credentials() -> None:
+    assert XClient.validate_identity(
+        {"data": {"id": "100", "username": "first"}}, "100", "@first"
+    ) == ("100", "first")
+
+    try:
+        XClient.validate_identity(
+            {"data": {"id": "200", "username": "second"}}, "100", "first"
+        )
+    except Exception as exc:
+        assert "identity mismatch" in str(exc)
+    else:
+        raise AssertionError("cross-account X credentials must be rejected")

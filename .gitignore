@@ -1,4 +1,5 @@
 .env
+accounts.toml
 xkey.txt
 xurl/
 .venv/
