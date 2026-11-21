@@ -203,6 +203,13 @@ class Pipeline:
 
     async def publish_note_url(self, source_url: str) -> Path:
         """Publish one explicitly supplied, author-verified note URL once."""
+        return await self._publish_note_url(source_url, force_new_publication=False)
+
+    async def republish_note_url(self, source_url: str) -> Path:
+        """Explicitly publish a corrected copy of an already-processed note."""
+        return await self._publish_note_url(source_url, force_new_publication=True)
+
+    async def _publish_note_url(self, source_url: str, force_new_publication: bool) -> Path:
         report_dir = self.settings.data_dir / "daily"
         report_dir.mkdir(parents=True, exist_ok=True)
         identity = None
@@ -222,13 +229,20 @@ class Pipeline:
             if row and row["status"] in {"published", "publishing", "publish_unknown"}:
                 tweet_ids, media_ids = self.store.get_publish_state(note.note_id)
                 has_saved_media = any(media_ids.values())
-                if row["status"] != "publish_unknown" or tweet_ids or has_saved_media:
+                if not force_new_publication and (
+                    row["status"] != "publish_unknown" or tweet_ids or has_saved_media
+                ):
                     raise XhsCLIError(
                         f"note {note.note_id} already has publication state {row['status']}; "
                         "refusing duplicate post"
                     )
             return await self._process_note(
-                note, report_dir, "publish-note-url", identity, []
+                note,
+                report_dir,
+                "republish-note-url" if force_new_publication else "publish-note-url",
+                identity,
+                [],
+                force_new_publication=force_new_publication,
             )
         except (XhsCLIError, OSError, ValueError) as exc:
             return self._write_report(
@@ -460,6 +474,7 @@ class Pipeline:
         operation: str,
         identity: object,
         errors: list[str] | None = None,
+        force_new_publication: bool = False,
     ) -> Path:
         errors = list(errors or [])
         translation: Translation | None = None
@@ -506,7 +521,10 @@ class Pipeline:
             if not ready:
                 errors.append(f"publish blocked: {reason}")
             elif not errors:
-                await self._publish(note, posts, errors)
+                if force_new_publication:
+                    await self._publish(note, posts, errors, force_new_publication=True)
+                else:
+                    await self._publish(note, posts, errors)
         if note.note_id:
             self.store.upsert_discovered(note.note_id, note.source_url)
             current = self.store.get(note.note_id)
@@ -520,7 +538,13 @@ class Pipeline:
             note_dir, note, errors, media_paths, translation, operation, identity
         )
 
-    async def _publish(self, note: Note, posts: list[DraftPost], errors: list[str]) -> None:
+    async def _publish(
+        self,
+        note: Note,
+        posts: list[DraftPost],
+        errors: list[str],
+        force_new_publication: bool = False,
+    ) -> None:
         client = XClient(
             self.settings.x_api_base_url,
             self.settings.x_user_access_token,
@@ -539,7 +563,10 @@ class Pipeline:
             resource_owner_secret=self.settings.x_access_token_secret,
             media_base_url=self.settings.x_media_upload_base_url,
         )
-        saved_tweet_ids, saved_media_ids = self.store.get_publish_state(note.note_id)
+        if force_new_publication:
+            saved_tweet_ids, saved_media_ids = [], {}
+        else:
+            saved_tweet_ids, saved_media_ids = self.store.get_publish_state(note.note_id)
         current_media_ids = dict(saved_media_ids)
 
         def progress(tweet_ids: list[str], media_ids: dict[str, list[str]]) -> None:
@@ -550,6 +577,12 @@ class Pipeline:
             )
 
         try:
+            identity_payload = await client.verify_credentials()
+            client.validate_identity(
+                identity_payload,
+                self.settings.x_expected_user_id,
+                self.settings.x_username,
+            )
             tweet_ids = await client.publish_thread(
                 posts, saved_tweet_ids, saved_media_ids, progress
             )
@@ -559,7 +592,7 @@ class Pipeline:
         except XAPIError as exc:
             self.store.set_status(
                 note.note_id,
-                "publish_unknown",
+                "failed" if str(exc).startswith("X identity mismatch") else "publish_unknown",
                 error_reason=str(exc),
                 tweet_ids=saved_tweet_ids,
                 media_ids=current_media_ids,
@@ -629,12 +662,15 @@ class Pipeline:
         return report
 
 
-async def run_daemon(pipeline: Pipeline) -> None:
-    zone = ZoneInfo(pipeline.settings.timezone)
-    lock_path = pipeline.settings.data_dir / ".collector.lock"
+async def run_daemon(pipelines: list[Pipeline]) -> None:
+    if not pipelines:
+        raise ValueError("at least one enabled account is required")
+    zone = ZoneInfo(pipelines[0].settings.timezone)
     while True:
-        with collector_lock(lock_path):
-            await pipeline.run_once()
+        for pipeline in pipelines:
+            lock_path = pipeline.settings.data_dir / ".collector.lock"
+            with collector_lock(lock_path):
+                await pipeline.run_once()
         now = datetime.now(zone)
         next_run = now.replace(hour=9, minute=0, second=0, microsecond=0)
         if next_run <= now:

@@ -5,7 +5,9 @@ import asyncio
 import logging
 import shutil
 import sys
+from pathlib import Path
 
+from .accounts import load_account_settings, select_account
 from .config import Settings
 from .config_ui import serve_config_ui
 from .pipeline import Pipeline, collector_lock, run_daemon
@@ -35,6 +37,10 @@ def parser() -> argparse.ArgumentParser:
         help="publish one explicitly supplied, author-verified note URL once",
     )
     result.add_argument(
+        "--republish-note-url",
+        help="explicitly publish a corrected copy of one already-processed note URL",
+    )
+    result.add_argument(
         "--run-once",
         action="store_true",
         help="discover profile notes and process at most one new note",
@@ -58,6 +64,19 @@ def parser() -> argparse.ArgumentParser:
         help="run a read-only X /2/users/me authentication check",
     )
     result.add_argument(
+        "--account",
+        help="select one configured account; required when multiple accounts are enabled",
+    )
+    result.add_argument(
+        "--accounts-config",
+        help="override the multi-account TOML path (default: ACCOUNTS_CONFIG or ./accounts.toml)",
+    )
+    result.add_argument(
+        "--list-accounts",
+        action="store_true",
+        help="list enabled account IDs and exit without contacting external services",
+    )
+    result.add_argument(
         "--config-ui-port",
         type=int,
         default=8787,
@@ -69,8 +88,27 @@ def parser() -> argparse.ArgumentParser:
 
 async def main_async(args: argparse.Namespace) -> int:
     if args.config_ui:
-        return serve_config_ui("127.0.0.1", args.config_ui_port, ".env")
-    settings = Settings.from_env()
+        base_settings = Settings.from_env()
+        accounts_path = Path(args.accounts_config) if args.accounts_config else base_settings.accounts_config
+        return serve_config_ui("127.0.0.1", args.config_ui_port, ".env", accounts_path)
+    base_settings = Settings.from_env()
+    accounts = load_account_settings(
+        base_settings, Path(args.accounts_config) if args.accounts_config else None
+    )
+    if args.list_accounts:
+        for account in accounts:
+            print(account.account_id)
+        return 0
+    if args.daemon:
+        pipelines = [Pipeline(account) for account in accounts]
+        try:
+            await run_daemon(pipelines)
+        finally:
+            for pipeline in pipelines:
+                await pipeline.close()
+        return 0
+
+    settings = select_account(accounts, args.account)
     settings.ensure_directories()
     if args.healthcheck:
         if settings.xhs_backend == "cli" and not shutil.which(settings.xhs_cli_path):
@@ -105,15 +143,17 @@ async def main_async(args: argparse.Namespace) -> int:
         )
         try:
             payload = await client.verify_credentials()
+            user_id, username = client.validate_identity(
+                payload, settings.x_expected_user_id, settings.x_username
+            )
         except XAPIError as exc:
             logging.error("X auth check failed: %s", exc)
             return 1
-        account = payload.get("data") or payload
         print(
             "X auth ok: auth_mode={} user_id={} username={}".format(
                 client.auth_mode,
-                account.get("id") or account.get("id_str", "unknown"),
-                account.get("username") or account.get("screen_name", "unknown"),
+                user_id or "unknown",
+                username or "unknown",
             )
         )
         return 0
@@ -129,6 +169,11 @@ async def main_async(args: argparse.Namespace) -> int:
                 report = await pipeline.publish_note_url(args.publish_note_url)
             print(report)
             return 0
+        if args.republish_note_url:
+            with collector_lock(settings.data_dir / ".collector.lock"):
+                report = await pipeline.republish_note_url(args.republish_note_url)
+            print(report)
+            return 0
         if args.test_profile_latest:
             with collector_lock(settings.data_dir / ".collector.lock"):
                 report = await pipeline.test_profile_latest()
@@ -138,9 +183,6 @@ async def main_async(args: argparse.Namespace) -> int:
             with collector_lock(settings.data_dir / ".collector.lock"):
                 report = await pipeline.publish_profile_rank(args.publish_profile_rank)
             print(report)
-            return 0
-        if args.daemon:
-            await run_daemon(pipeline)
             return 0
         report = await pipeline.run_once()
         print(report)
