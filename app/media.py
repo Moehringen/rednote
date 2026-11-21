@@ -17,6 +17,17 @@ class MediaDownloadError(RuntimeError):
     pass
 
 
+def _valid_image_signature(data: bytes) -> bool:
+    """Reject HTML/error bodies and mislabeled non-image downloads."""
+    return (
+        data.startswith(b"\xff\xd8\xff")
+        or data.startswith(b"\x89PNG\r\n\x1a\n")
+        or data.startswith((b"GIF87a", b"GIF89a"))
+        or (data.startswith(b"RIFF") and data[8:12] == b"WEBP")
+        or data.startswith(b"\x00\x00\x01\x00")
+    )
+
+
 def _extension(url: str, content_type: str, default: str = ".bin") -> str:
     suffix = Path(urlparse(url).path).suffix.lower()
     allowed = {
@@ -62,6 +73,15 @@ async def _download(
                         file.write(chunk)
             if not temporary.exists() or temporary.stat().st_size == 0:
                 raise MediaDownloadError("media file was empty after download")
+            if expected_prefix == "image/":
+                with temporary.open("rb") as file:
+                    if not _valid_image_signature(file.read(16)):
+                        raise MediaDownloadError(
+                            "image response did not have a valid image signature"
+                        )
+            actual_suffix = _extension(url, content_type, destination.suffix or ".bin")
+            if actual_suffix != destination.suffix:
+                destination = destination.with_suffix(actual_suffix)
             temporary.replace(destination)
             return destination
         except (httpx.HTTPError, OSError, MediaDownloadError) as exc:
@@ -102,7 +122,7 @@ async def download_media_urls(
     ) as client:
         for index, raw_url in enumerate(urls, start=1):
             url = urljoin("https:", raw_url)
-            suffix = _extension(url, prefix, default_extension)
+            suffix = _extension(url, "", default_extension)
             destination = output_dir / (
                 f"{index:02d}{suffix}" if media_kind == "image" else f"video{suffix}"
             )

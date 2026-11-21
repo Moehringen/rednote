@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -19,6 +19,22 @@ from .xhs_cli import XhsCLIError
 
 class BrowserLoginRequired(XhsCLIError):
     """The visible persistent browser needs the user to log in again."""
+
+
+def _is_avatar_url(value: str) -> bool:
+    """Return True for profile/avatar assets, never valid note media."""
+    parsed = urlparse(value)
+    path = parsed.path.casefold()
+    return any(
+        marker in path
+        for marker in (
+            "/avatar/",
+            "/avatars/",
+            "/user-avatar/",
+            "/author-avatar/",
+            "/profile-avatar/",
+        )
+    )
 
 
 def _published_at(value: str, timezone: str) -> str | None:
@@ -99,13 +115,39 @@ _DETAIL_SCRIPT = r"""
   const tags = Array.from(noteContent?.querySelectorAll("a[href*='/search_result']") || [])
     .map(a => (a.textContent || "").trim())
     .filter(Boolean);
-  const images = Array.from(document.querySelectorAll(".note-container img"))
-    .filter(img => {
-      const cls = String(img.className || "").toLowerCase();
-      return img.src && !/avatar|emoji|logo|user-image|author-avatar|reds-img/.test(cls);
-    })
-    .map(img => img.currentSrc || img.src)
-    .filter(Boolean);
+  const imageUrls = new Set();
+  const addImageUrl = value => {
+    if (!value || typeof value !== "string") return;
+    const raw = value.trim().replace(/^url\(["']?/, "").replace(/["']?\)$/, "");
+    if (
+      !raw ||
+      raw === "none" ||
+      raw.startsWith("data:") ||
+      raw.startsWith("blob:") ||
+      !/^(?:https?:|\/\/)/i.test(raw) ||
+      /(?:^|\/)avatar(?:s)?(?:\/|$)/i.test(raw)
+    ) return;
+    imageUrls.add(raw);
+  };
+  const mediaNodes = Array.from(document.querySelectorAll(
+    ".note-container img, .note-container [data-src], .note-container [data-original], " +
+    ".note-container [data-image], .note-container [data-url], " +
+    ".note-container [style*='background-image']"
+  ));
+  for (const node of mediaNodes) {
+    const descriptor = [
+      String(node.className || ""),
+      String(node.getAttribute?.("aria-label") || ""),
+      String(node.getAttribute?.("alt") || ""),
+    ].join(" ").toLowerCase();
+    if (/avatar|emoji|logo|author|profile/.test(descriptor)) continue;
+    addImageUrl(node.currentSrc || node.src);
+    addImageUrl(node.getAttribute?.("data-src"));
+    addImageUrl(node.getAttribute?.("data-original"));
+    addImageUrl(node.getAttribute?.("data-image"));
+    addImageUrl(node.getAttribute?.("data-url"));
+    addImageUrl(getComputedStyle(node).backgroundImage);
+  }
   const videos = Array.from(document.querySelectorAll(".note-container video"))
     .map(video => video.currentSrc || video.src || video.querySelector("source")?.src || "")
     .filter(Boolean);
@@ -117,7 +159,7 @@ _DETAIL_SCRIPT = r"""
     body: bodyNode?.textContent?.trim() || "",
     published_at: noteContent?.querySelector(".date, .bottom-container .date")?.textContent?.trim() || "",
     tags,
-    images: Array.from(new Set(images)),
+    images: Array.from(imageUrls),
     videos: Array.from(new Set(videos)),
     covers: Array.from(new Set(covers)),
     url: location.href.split("?")[0],
@@ -418,7 +460,11 @@ class BrowserXhsClient:
 
     async def _extract_note(self, note_id: str, source_url: str) -> Note:
         raw = await self._page.evaluate(_DETAIL_SCRIPT)
-        images = [str(item) for item in raw.get("images", []) if item]
+        images = [
+            str(item)
+            for item in raw.get("images", [])
+            if item and not _is_avatar_url(str(item))
+        ]
         videos = [str(item) for item in raw.get("videos", []) if item]
         covers = [str(item) for item in raw.get("covers", []) if item]
         note_type = "video" if videos else ("image" if images else "unsupported")
