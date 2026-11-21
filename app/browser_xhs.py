@@ -450,12 +450,28 @@ class BrowserXhsClient:
         return await self._extract_note(note_id, source_url)
 
     async def note_from_url(self, source_url: str) -> Note:
+        requested_match = re.search(
+            r"/(?:discovery/item|explore|user/profile/[^/]+)/([A-Za-z0-9]+)",
+            source_url,
+        )
         await self._navigate(source_url)
         match = re.search(
             r"/(?:discovery/item|explore|user/profile/[^/]+)/([A-Za-z0-9]+)", self._page.url
         )
         if not match:
-            raise XhsCLIError("browser note URL did not resolve to a note detail page")
+            if not requested_match:
+                raise XhsCLIError("browser note URL did not resolve to a note detail page")
+            # Some share/canonical URLs are redirected to an interstitial even
+            # though the same note is available from the verified profile card.
+            # Re-enter through that card instead of treating the redirect as a
+            # missing note or using unrelated page images.
+            await self._open_note_from_profile(requested_match.group(1))
+            match = re.search(
+                r"/(?:discovery/item|explore|user/profile/[^/]+)/([A-Za-z0-9]+)",
+                self._page.url,
+            )
+            if not match:
+                raise XhsCLIError("browser note URL and verified profile fallback did not resolve")
         return await self._extract_note(match.group(1), source_url)
 
     async def _extract_note(self, note_id: str, source_url: str) -> Note:
